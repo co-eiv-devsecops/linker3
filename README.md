@@ -42,6 +42,18 @@ Abrir en el navegador: <http://localhost:3000>
 | POST   | `/api/shorten` | Acortar una URL            |
 | GET    | `/:code`       | Redirigir al link original |
 
+## Despliegue rápido (script)
+
+Copia los archivos a la VM y reinicia el servicio en un solo comando:
+
+```bash
+bash deploy.sh
+```
+
+Requiere tener la llave `.ssh/linkervm-3.key` en tu computador. El script hace:
+1. Copia `server.js`, `public/index.html` y `package.json` a la VM via SCP
+2. Reinicia el servicio con `sudo systemctl restart linker`
+
 ## Estructura
 
 ```text
