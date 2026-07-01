@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Linker</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #f5f5f7; font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.card { background: #fff; border-radius: 20px; box-shadow: 0 2px 24px rgba(0,0,0,.08); padding: 40px 36px; width: 100%; max-width: 480px; }
+.logo { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.icon { width: 38px; height: 38px; background: #4f46e5; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; }
+h1 { font-size: 1.5rem; font-weight: 800; color: #111; }
+p { color: #6b7280; font-size: .9rem; margin-bottom: 28px; }
+label { display: block; font-size: .82rem; font-weight: 600; color: #374151; margin-bottom: 6px; }
+input { width: 100%; padding: 12px 14px; border: 1.5px solid #e5e7eb; border-radius: 10px; font-size: .95rem; color: #111; outline: none; }
+input:focus { border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,.1); }
+input::placeholder { color: #9ca3af; }
+button { margin-top: 12px; width: 100%; padding: 13px; background: #4f46e5; color: #fff; border: none; border-radius: 10px; font-size: .95rem; font-weight: 600; cursor: pointer; }
+button:hover { background: #4338ca; }
+button:disabled { opacity: .55; cursor: not-allowed; }
+#result { display: none; margin-top: 14px; background: #f5f5f7; border: 1.5px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; align-items: center; gap: 8px; }
+#result.show { display: flex; }
+#short { flex: 1; font-size: .92rem; color: #4f46e5; font-weight: 500; word-break: break-all; }
+#copy { margin-top: 0; width: auto; padding: 7px 14px; font-size: .82rem; }
+#copy.done { background: #16a34a; }
+#err { display: none; margin-top: 10px; padding: 9px 14px; border-radius: 8px; font-size: .88rem; background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+#err.show { display: block; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo"><div class="icon">&#128279;</div><h1>Linker</h1></div>
+  <p>Acorta cualquier URL al instante</p>
+  <label for="urlInput">URL a acortar</label>
+  <input id="urlInput" type="url" placeholder="https://ejemplo.com/url-muy-larga">
+  <button id="btn" onclick="acortar()">Acortar URL</button>
+  <div id="result">
+    <span id="short"></span>
+    <button id="copy" onclick="copiar()">Copiar</button>
+  </div>
+  <div id="err"></div>
+</div>
+<script>
+var urlInput = document.getElementById('urlInput');
+var btn = document.getElementById('btn');
+var result = document.getElementById('result');
+var shortEl = document.getElementById('short');
+var copyBtn = document.getElementById('copy');
+var errEl = document.getElementById('err');
+
+urlInput.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') acortar();
+});
+
+async function acortar() {
+  var url = urlInput.value.trim();
+  if (!url) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Acortando...';
+  result.className = '';
+  errEl.className = '';
+
+  try {
+    var r = await fetch('/api/shorten', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: url })
+    });
+    var d = await r.json();
+    if (r.ok) {
+      shortEl.textContent = d.short;
+      result.className = 'show';
+      copyBtn.textContent = 'Copiar';
+      copyBtn.className = '';
+      urlInput.value = '';
+    } else {
+      errEl.textContent = d.error;
+      errEl.className = 'show';
+    }
+  } catch (e) {
+    errEl.textContent = 'Error de conexion';
+    errEl.className = 'show';
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Acortar URL';
+}
+
+function copiar() {
+  navigator.clipboard.writeText(shortEl.textContent).then(function() {
+    copyBtn.textContent = 'Copiado!';
+    copyBtn.className = 'done';
+    setTimeout(function() {
+      copyBtn.textContent = 'Copiar';
+      copyBtn.className = '';
+    }, 2000);
+  });
+}
+</script>
+</body>
+</html>

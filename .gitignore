@@ -1,0 +1,4 @@
+node_modules/
+linker.db
+*.db-journal
+.env
