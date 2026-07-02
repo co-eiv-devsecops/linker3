@@ -1,0 +1,10 @@
+# Copie este archivo a terraform.tfvars (gitignored) y complete con sus valores reales.
+# compartment_id y subnet_id los da el instructor/consola de OCI para su cuenta.
+
+compartment_id = "ocid1.compartment.oc1..PONGA_SU_COMPARTMENT_OCID"
+subnet_id      = "ocid1.subnet.oc1.sa-bogota-1.PONGA_SU_SUBNET_OCID"
+
+# Opcionales — solo si difieren de los defaults en variables.tf
+# oci_profile         = "DEFAULT"
+# display_name        = "linker-vm"
+# ssh_public_key_path = "~/.ssh/linker.pub"

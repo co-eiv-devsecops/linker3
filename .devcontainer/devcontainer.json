@@ -1,0 +1,21 @@
+{
+  "name": "Linker Dev",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:22-bookworm",
+  "forwardPorts": [3000],
+  "postCreateCommand": "[ -f .env ] || cp .env.example .env",
+  "remoteEnv": {
+    "PORT": "3000",
+    "BASE_URL": "http://localhost:3000"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "ms-vscode.js-debug-nightly"
+      ],
+      "settings": {
+        "editor.formatOnSave": true
+      }
+    }
+  }
+}

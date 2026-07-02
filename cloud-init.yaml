@@ -1,0 +1,90 @@
+#cloud-config
+# Provisiona una VM Ubuntu 22.04+ para Linker.
+# Uso: pegue este contenido en el campo "User Data" al crear la instancia.
+# Personalización: edite REPO y BASE_URL en provision.sh antes de usar.
+# Requiere Node.js >= 22.13 (node:sqlite deja de necesitar --experimental-sqlite
+# a partir de esa versión); setup_22.x de NodeSource ya resuelve a esa serie.
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - nginx
+  - git
+  - curl
+  - certbot
+  - python3-certbot-nginx
+
+write_files:
+  - path: /etc/systemd/system/linker.service
+    content: |
+      [Unit]
+      Description=Linker URL Shortener
+      After=network.target
+
+      [Service]
+      Type=simple
+      User=ubuntu
+      WorkingDirectory=/opt/linker
+      EnvironmentFile=/opt/linker/.env
+      ExecStart=/usr/bin/node server.js
+      Restart=on-failure
+      RestartSec=5
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /etc/nginx/sites-available/linker
+    content: |
+      server {
+          listen 80;
+          server_name _;
+
+          location / {
+              proxy_pass http://localhost:3000;
+              proxy_http_version 1.1;
+              proxy_set_header Host              $host;
+              proxy_set_header X-Real-IP         $remote_addr;
+              proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+          }
+      }
+
+  - path: /opt/provision.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+
+      REPO="https://github.com/co-eiv-devsecops/linker3.git"
+      APP_DIR="/opt/linker"
+      BASE_URL="https://3.n-la-c.app"
+
+      curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+      apt-get install -y nodejs
+
+      if [ -d "$APP_DIR/.git" ]; then
+        git -C "$APP_DIR" pull
+      else
+        git clone "$REPO" "$APP_DIR"
+      fi
+      chown -R ubuntu:ubuntu "$APP_DIR"
+
+      printf "PORT=3000\nBASE_URL=%s\n" "$BASE_URL" > "$APP_DIR/.env"
+      chown ubuntu:ubuntu "$APP_DIR/.env"
+      chmod 600 "$APP_DIR/.env"
+
+      systemctl daemon-reload
+      systemctl enable linker
+      systemctl restart linker
+
+      ln -sf /etc/nginx/sites-available/linker /etc/nginx/sites-enabled/linker
+      rm -f /etc/nginx/sites-enabled/default
+      systemctl enable nginx
+      systemctl restart nginx
+
+      # TLS no se automatiza: certbot necesita que el dominio ya resuelva a esta IP.
+      # Ejecutar manualmente tras el primer arranque: certbot --nginx -d 3.n-la-c.app
+
+runcmd:
+  - bash /opt/provision.sh
