@@ -1,7 +1,9 @@
 #cloud-config
 # Provisiona una VM Ubuntu 22.04+ para Linker.
 # Uso: pegue este contenido en el campo "User Data" al crear la instancia.
-# Personalización: edite REPO y BASE_URL en la sección runcmd.
+# Personalización: edite REPO y BASE_URL en provision.sh antes de usar.
+# Requiere Node.js >= 22.13 (node:sqlite deja de necesitar --experimental-sqlite
+# a partir de esa versión); setup_22.x de NodeSource ya resuelve a esa serie.
 
 package_update: true
 package_upgrade: false
@@ -10,6 +12,8 @@ packages:
   - nginx
   - git
   - curl
+  - certbot
+  - python3-certbot-nginx
 
 write_files:
   - path: /etc/systemd/system/linker.service
@@ -46,22 +50,41 @@ write_files:
           }
       }
 
+  - path: /opt/provision.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+
+      REPO="https://github.com/co-eiv-devsecops/linker3.git"
+      APP_DIR="/opt/linker"
+      BASE_URL="https://3.n-la-c.app"
+
+      curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+      apt-get install -y nodejs
+
+      if [ -d "$APP_DIR/.git" ]; then
+        git -C "$APP_DIR" pull
+      else
+        git clone "$REPO" "$APP_DIR"
+      fi
+      chown -R ubuntu:ubuntu "$APP_DIR"
+
+      printf "PORT=3000\nBASE_URL=%s\n" "$BASE_URL" > "$APP_DIR/.env"
+      chown ubuntu:ubuntu "$APP_DIR/.env"
+      chmod 600 "$APP_DIR/.env"
+
+      systemctl daemon-reload
+      systemctl enable linker
+      systemctl restart linker
+
+      ln -sf /etc/nginx/sites-available/linker /etc/nginx/sites-enabled/linker
+      rm -f /etc/nginx/sites-enabled/default
+      systemctl enable nginx
+      systemctl restart nginx
+
+      # TLS no se automatiza: certbot necesita que el dominio ya resuelva a esta IP.
+      # Ejecutar manualmente tras el primer arranque: certbot --nginx -d 3.n-la-c.app
+
 runcmd:
-  - export REPO="https://github.com/co-eiv-devsecops/linker3.git"
-  - export APP_DIR="/opt/linker"
-  - export BASE_URL="https://3.n-la-c.app"
-  - curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-  - apt-get install -y nodejs
-  - mkdir -p $APP_DIR
-  - git clone $REPO $APP_DIR
-  - chown -R ubuntu:ubuntu $APP_DIR
-  - printf "PORT=3000\nBASE_URL=%s\n" "$BASE_URL" > $APP_DIR/.env
-  - chown ubuntu:ubuntu $APP_DIR/.env
-  - chmod 600 $APP_DIR/.env
-  - systemctl daemon-reload
-  - systemctl enable linker
-  - systemctl start linker
-  - ln -sf /etc/nginx/sites-available/linker /etc/nginx/sites-enabled/linker
-  - rm -f /etc/nginx/sites-enabled/default
-  - systemctl enable nginx
-  - systemctl restart nginx
+  - bash /opt/provision.sh
