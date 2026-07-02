@@ -1,0 +1,118 @@
+name: CI/CD - Dev
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [develop]
+  workflow_dispatch:
+
+concurrency:
+  group: dev-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "22"
+  APP_NAME: linker
+  ENVIRONMENT: dev
+
+jobs:
+  lint:
+    name: Lint y calidad de código
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del código
+        run: echo "Hello World - checkout del repositorio (actions/checkout@v4)"
+
+      - name: Configurar Node.js ${{ env.NODE_VERSION }}
+        run: echo "Hello World - setup de Node.js 22 (actions/setup-node@v4)"
+
+      - name: Verificar sintaxis (node --check)
+        run: echo "Hello World - node --check server.js src/*.js"
+
+      - name: Análisis de estilo
+        run: echo "Hello World - análisis estático de código"
+
+  test:
+    name: Pruebas unitarias
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout del código
+        run: echo "Hello World - checkout del repositorio"
+
+      - name: Configurar Node.js ${{ env.NODE_VERSION }}
+        run: echo "Hello World - setup de Node.js 22 (requerido por node:sqlite)"
+
+      - name: Ejecutar tests
+        run: echo "Hello World - npm test (node --test sobre test/)"
+
+      - name: Reporte de cobertura
+        run: echo "Hello World - npm run test:coverage"
+
+      - name: Publicar resultados de tests
+        run: echo "Hello World - subir artefacto con reporte de cobertura"
+
+  security-scan:
+    name: Escaneo de seguridad
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout del código
+        run: echo "Hello World - checkout del repositorio"
+
+      - name: Escaneo de secretos
+        run: echo "Hello World - escaneo de secretos (gitleaks / trufflehog)"
+
+      - name: Análisis SAST
+        run: echo "Hello World - análisis estático de seguridad (CodeQL / semgrep)"
+
+      - name: Escaneo de IaC (Terraform / cloud-init)
+        run: echo "Hello World - tfsec/checkov sobre infra/terraform-oracle y cloud-init.yaml"
+
+  build:
+    name: Build y empaquetado
+    runs-on: ubuntu-latest
+    needs: [test, security-scan]
+    steps:
+      - name: Checkout del código
+        run: echo "Hello World - checkout del repositorio"
+
+      - name: Validar arranque de la aplicación
+        run: echo "Hello World - arranque de humo con node server.js (PORT=3000, DB_PATH=/tmp/linker.db)"
+
+      - name: Empaquetar artefacto
+        run: echo "Hello World - empaquetar server.js, src/, public/, package.json"
+
+      - name: Subir artefacto
+        run: echo "Hello World - actions/upload-artifact@v4 (linker-dev-${{ github.sha }})"
+
+  deploy-dev:
+    name: Deploy a Dev
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    environment:
+      name: dev
+      url: http://dev.n-la-c.app
+    steps:
+      - name: Configurar llave SSH
+        run: echo "Hello World - cargar secret SSH_PRIVATE_KEY_DEV (linkervm-dev.key)"
+
+      - name: Actualizar código en la VM de dev
+        run: echo "Hello World - ssh ubuntu@VM_DEV 'cd /opt/linker && git pull origin develop'"
+
+      - name: Reiniciar servicio
+        run: echo "Hello World - ssh ubuntu@VM_DEV 'sudo systemctl restart linker'"
+
+      - name: Verificar estado del servicio
+        run: echo "Hello World - ssh ubuntu@VM_DEV 'sudo systemctl status linker --no-pager'"
+
+  notify:
+    name: Notificar resultado
+    runs-on: ubuntu-latest
+    needs: deploy-dev
+    if: always()
+    steps:
+      - name: Notificar al equipo
+        run: echo "Hello World - notificación (Slack/correo) del resultado del pipeline dev"
