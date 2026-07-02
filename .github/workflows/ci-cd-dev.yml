@@ -22,13 +22,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout del código
-        run: echo "Hello World - checkout del repositorio (actions/checkout@v4)"
+        uses: actions/checkout@v4
 
       - name: Configurar Node.js ${{ env.NODE_VERSION }}
-        run: echo "Hello World - setup de Node.js 22 (actions/setup-node@v4)"
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
 
       - name: Verificar sintaxis (node --check)
-        run: echo "Hello World - node --check server.js src/*.js"
+        run: |
+          node --check server.js
+          for f in src/*.js; do node --check "$f"; done
 
       - name: Análisis de estilo
         run: echo "Hello World - análisis estático de código"
@@ -39,19 +47,28 @@ jobs:
     needs: lint
     steps:
       - name: Checkout del código
-        run: echo "Hello World - checkout del repositorio"
+        uses: actions/checkout@v4
 
       - name: Configurar Node.js ${{ env.NODE_VERSION }}
-        run: echo "Hello World - setup de Node.js 22 (requerido por node:sqlite)"
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
 
       - name: Ejecutar tests
-        run: echo "Hello World - npm test (node --test sobre test/)"
+        run: npm test
 
       - name: Reporte de cobertura
-        run: echo "Hello World - npm run test:coverage"
+        run: npm run test:coverage | tee coverage.txt
 
       - name: Publicar resultados de tests
-        run: echo "Hello World - subir artefacto con reporte de cobertura"
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-${{ github.sha }}
+          path: coverage.txt
 
   security-scan:
     name: Escaneo de seguridad
@@ -76,16 +93,39 @@ jobs:
     needs: [test, security-scan]
     steps:
       - name: Checkout del código
-        run: echo "Hello World - checkout del repositorio"
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
 
       - name: Validar arranque de la aplicación
-        run: echo "Hello World - arranque de humo con node server.js (PORT=3000, DB_PATH=/tmp/linker.db)"
+        run: |
+          PORT=3000 DB_PATH=/tmp/linker.db node server.js &
+          SERVER_PID=$!
+          for i in $(seq 1 10); do
+            curl -sf http://localhost:3000/ > /dev/null && break
+            sleep 1
+          done
+          curl -sf http://localhost:3000/ > /dev/null
+          kill $SERVER_PID
 
-      - name: Empaquetar artefacto
-        run: echo "Hello World - empaquetar server.js, src/, public/, package.json"
+      - name: Construir imagen Docker (empaquetamiento para Linux)
+        run: docker build -f infra/docker/Dockerfile -t ${{ env.APP_NAME }}:${{ github.sha }} .
+
+      - name: Empaquetar imagen como artefacto
+        run: docker save ${{ env.APP_NAME }}:${{ github.sha }} -o ${{ env.APP_NAME }}-${{ github.sha }}.tar
 
       - name: Subir artefacto
-        run: echo "Hello World - actions/upload-artifact@v4 (linker-dev-${{ github.sha }})"
+        uses: actions/upload-artifact@v4
+        with:
+          name: linker-dev-${{ github.sha }}
+          path: ${{ env.APP_NAME }}-${{ github.sha }}.tar
 
   deploy-dev:
     name: Deploy a Dev
