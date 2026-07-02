@@ -75,7 +75,7 @@ linker3/
 ├── cloud-init.yaml    # Provisionamiento de VM (paridad de entornos)
 ├── provision.sh       # Script de provisión (copia de la sección write_files de cloud-init.yaml, para probar sin VM)
 ├── deploy.sh          # Script de despliegue via git pull
-├── infra/             # Demo local de paridad de entornos (Terraform + Docker)
+├── infra/             # IaC: terraform-oracle/ (VM real en OCI), terraform/ + docker/ (demo local)
 ├── .env.example       # Plantilla de variables de entorno
 └── package.json
 ```
@@ -116,9 +116,21 @@ ssh -i .ssh/linkervm-3.key ubuntu@<IP_VM> "sudo systemctl status linker"
 ssh -i .ssh/linkervm-3.key ubuntu@<IP_VM> "sudo systemctl status nginx"
 ```
 
+## Terraform (Oracle Cloud real)
+
+[`infra/terraform-oracle/`](infra/terraform-oracle/) crea la VM de Linker directamente en Oracle Cloud (compartment/subnet ya provistos por el curso) e inyecta `cloud-init.yaml` como `user_data` — no duplica la lógica de provisión.
+
+```bash
+cd infra/terraform-oracle
+cp terraform.tfvars.example terraform.tfvars   # completar con su compartment_id/subnet_id
+terraform init && terraform apply
+```
+
+Ver [`infra/terraform-oracle/README.md`](infra/terraform-oracle/README.md) para detalles.
+
 ## Demo local de paridad — Terraform + Docker
 
-[`infra/`](infra/) contiene una segunda técnica de IaC: Terraform + Docker para levantar localmente la misma definición de entorno (Node 22 + la app) sin depender de credenciales de nube. Ver [`infra/README.md`](infra/README.md) para instrucciones completas.
+[`infra/terraform/`](infra/terraform/) contiene una segunda técnica de IaC: Terraform + Docker para levantar localmente la misma definición de entorno (Node 22 + la app) sin depender de credenciales de nube. Ver [`infra/README.md`](infra/README.md) para instrucciones completas.
 
 ```bash
 cd infra/terraform

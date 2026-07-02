@@ -3,7 +3,8 @@ linker.db
 *.db-journal
 .env
 
-# Terraform (infra/terraform) — .terraform.lock.hcl SÍ se versiona (pin de providers)
+# Terraform (infra/terraform*) — .terraform.lock.hcl SÍ se versiona (pin de providers)
 .terraform/
 terraform.tfstate
 terraform.tfstate.backup
+terraform.tfvars

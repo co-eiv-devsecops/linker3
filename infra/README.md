@@ -1,18 +1,33 @@
 # infra/ — Paridad de entornos
 
-Dos técnicas de IaC que persiguen el mismo objetivo (un entorno reproducible
+Tres técnicas de IaC que persiguen el mismo objetivo (un entorno reproducible
 para correr Linker) con distinto alcance:
 
 | Técnica | Dónde vive | Target | Propósito |
 |---|---|---|---|
-| `cloud-init.yaml` (raíz del repo) | Oracle Cloud (o cualquier nube compatible con cloud-init) | VM real de producción | Aprovisiona una VM desde cero: Node 22, systemd, nginx |
-| `infra/terraform/` + `infra/docker/` | Local (Docker) | Demo de desarrollo | Reproduce el mismo entorno de ejecución (Node 22 + la app) sin depender de credenciales de nube |
+| `cloud-init.yaml` (raíz del repo) | Cualquier nube compatible con cloud-init | Provisión in-VM | Instala Node 22, systemd, nginx dentro de una VM ya existente |
+| `infra/terraform-oracle/` | Oracle Cloud real | VM real de producción/desarrollo | Crea la VM en OCI e inyecta `cloud-init.yaml` como `user_data` — es la técnica que realmente despliega |
+| `infra/terraform/` + `infra/docker/` | Local (Docker) | Demo de desarrollo | Reproduce el mismo entorno de ejecución sin depender de credenciales de nube |
 
 `infra/docker/Dockerfile` construye la misma definición de entorno que
-`cloud-init.yaml` instala en la VM (Node 22, sin dependencias externas). Sirve
-como demo local de "paridad de entornos": el mismo artefacto de entorno se
-puede levantar en un contenedor o adaptarse para crear una imagen de VM real
-(p. ej. con Packer) sin cambiar la lógica de la app.
+`cloud-init.yaml` instala en la VM (Node 22, sin dependencias externas).
+
+## infra/terraform-oracle/ — VM real en Oracle Cloud
+
+Ver [`infra/terraform-oracle/README.md`](terraform-oracle/README.md) para
+instrucciones completas. Resumen:
+
+```bash
+cd infra/terraform-oracle
+cp terraform.tfvars.example terraform.tfvars   # completar con su compartment_id/subnet_id
+terraform init
+terraform apply
+```
+
+Requiere `oci` CLI ya configurado (`oci setup config`) — Terraform reutiliza
+ese mismo perfil de `~/.oci/config`.
+
+## infra/terraform/ — demo local (Docker)
 
 ## Requisitos
 
@@ -35,7 +50,7 @@ Para destruir el contenedor:
 terraform destroy
 ```
 
-## Variables (`variables.tf`)
+### Variables (`variables.tf`)
 
 | Variable | Default | Descripción |
 |---|---|---|
@@ -43,9 +58,7 @@ terraform destroy
 | `base_url` | `http://localhost:3000` | `BASE_URL` inyectada a la app |
 | `container_name` | `linker-dev` | Nombre del contenedor |
 
-## Limitaciones (demo local, no producción)
+### Limitaciones (demo local, no producción)
 
 - State de Terraform en local (`terraform.tfstate`), sin backend remoto.
-- No apunta a Oracle Cloud real: para eso usar `cloud-init.yaml` en la raíz
-  del repo, que es la técnica de paridad que efectivamente provisiona la VM
-  de producción.
+- No apunta a Oracle Cloud real: para eso usar `infra/terraform-oracle/`.
