@@ -60,6 +60,14 @@ curl -X POST https://3.n-la-c.app/api/shorten \
 
 Reglas del alias: solo letras, números, `-` y `_`, entre 3 y 30 caracteres. Retorna `409` si el alias ya existe.
 
+## Base de datos
+
+La BD SQLite (`linker.db`) se crea automáticamente al arrancar. Para reproducirla manualmente en otro entorno (o precargar datos de ejemplo):
+
+```bash
+sqlite3 linker.db < scripts/init-db.sql
+```
+
 ## Estructura
 
 ```text
@@ -71,6 +79,8 @@ linker3/
 │   └── index.html     # Interfaz web
 ├── .devcontainer/
 │   └── devcontainer.json  # Entorno de desarrollo en contenedor
+├── scripts/
+│   └── init-db.sql    # Reproduce la BD (esquema + datos de ejemplo)
 ├── server.js          # Servidor HTTP y ruteo
 ├── cloud-init.yaml    # Provisionamiento de VM (paridad de entornos)
 ├── provision.sh       # Script de provisión (copia de la sección write_files de cloud-init.yaml, para probar sin VM)

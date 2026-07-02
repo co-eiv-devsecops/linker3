@@ -9,6 +9,9 @@ resource "docker_image" "linker" {
   triggers = {
     dockerfile_sha1 = filesha1("${path.module}/../docker/Dockerfile")
     server_sha1     = filesha1("${path.module}/../../server.js")
+    db_sha1         = filesha1("${path.module}/../../src/db.js")
+    links_sha1      = filesha1("${path.module}/../../src/links.js")
+    ui_sha1         = filesha1("${path.module}/../../public/index.html")
   }
 }
 
