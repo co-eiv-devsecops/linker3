@@ -1,0 +1,159 @@
+name: CI/CD - Prod
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: prod-deploy
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "22"
+  APP_NAME: linker
+  ENVIRONMENT: prod
+  PROD_URL: https://3.n-la-c.app
+
+jobs:
+  lint:
+    name: Lint y calidad de código
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del código
+        run: echo "Hello World - checkout del repositorio (actions/checkout@v4)"
+
+      - name: Configurar Node.js ${{ env.NODE_VERSION }}
+        run: echo "Hello World - setup de Node.js 22 (actions/setup-node@v4)"
+
+      - name: Verificar sintaxis (node --check)
+        run: echo "Hello World - node --check server.js src/*.js"
+
+      - name: Análisis de estilo
+        run: echo "Hello World - análisis estático de código"
+
+  test:
+    name: Pruebas unitarias
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout del código
+        run: echo "Hello World - checkout del repositorio"
+
+      - name: Configurar Node.js ${{ env.NODE_VERSION }}
+        run: echo "Hello World - setup de Node.js 22 (requerido por node:sqlite)"
+
+      - name: Ejecutar tests
+        run: echo "Hello World - npm test (node --test sobre test/)"
+
+      - name: Reporte de cobertura
+        run: echo "Hello World - npm run test:coverage (umbral mínimo exigido en prod)"
+
+  security-scan:
+    name: Escaneo de seguridad
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout del código
+        run: echo "Hello World - checkout del repositorio"
+
+      - name: Escaneo de secretos
+        run: echo "Hello World - escaneo de secretos (gitleaks / trufflehog)"
+
+      - name: Análisis SAST
+        run: echo "Hello World - análisis estático de seguridad (CodeQL / semgrep)"
+
+      - name: Escaneo de IaC (Terraform / cloud-init)
+        run: echo "Hello World - tfsec/checkov sobre infra/terraform-oracle y cloud-init.yaml"
+
+      - name: Validar cumplimiento (gate bloqueante)
+        run: echo "Hello World - en prod cualquier hallazgo crítico detiene el pipeline"
+
+  build:
+    name: Build y empaquetado
+    runs-on: ubuntu-latest
+    needs: [test, security-scan]
+    steps:
+      - name: Checkout del código
+        run: echo "Hello World - checkout del repositorio"
+
+      - name: Validar arranque de la aplicación
+        run: echo "Hello World - arranque de humo con node server.js (PORT=3000, DB_PATH=/tmp/linker.db)"
+
+      - name: Empaquetar artefacto de release
+        run: echo "Hello World - empaquetar server.js, src/, public/, package.json"
+
+      - name: Versionar y subir artefacto
+        run: echo "Hello World - actions/upload-artifact@v4 (linker-prod-${{ github.sha }})"
+
+  plan-infra:
+    name: Terraform plan (Oracle Cloud)
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout del código
+        run: echo "Hello World - checkout del repositorio"
+
+      - name: Configurar credenciales OCI
+        run: echo "Hello World - cargar secrets OCI_CLI_* para el provider oci"
+
+      - name: terraform init
+        run: echo "Hello World - terraform init en infra/terraform-oracle"
+
+      - name: terraform plan
+        run: echo "Hello World - terraform plan (detectar drift de la VM antes de desplegar)"
+
+  deploy-prod:
+    name: Deploy a Producción
+    runs-on: ubuntu-latest
+    needs: plan-infra
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    environment:
+      name: prod
+      url: https://3.n-la-c.app
+    steps:
+      - name: Configurar llave SSH
+        run: echo "Hello World - cargar secret SSH_PRIVATE_KEY_PROD (linkervm-3.key)"
+
+      - name: Backup de la base de datos
+        run: echo "Hello World - ssh ubuntu@VM_PROD 'cp /opt/linker/linker.db /opt/backups/linker-${{ github.sha }}.db'"
+
+      - name: Actualizar código en la VM de producción
+        run: echo "Hello World - ssh ubuntu@VM_PROD 'cd /opt/linker && git pull origin main'"
+
+      - name: Reiniciar servicio
+        run: echo "Hello World - ssh ubuntu@VM_PROD 'sudo systemctl restart linker'"
+
+      - name: Verificar estado del servicio
+        run: echo "Hello World - ssh ubuntu@VM_PROD 'sudo systemctl status linker --no-pager'"
+
+  rollback:
+    name: Rollback automático
+    runs-on: ubuntu-latest
+    needs: deploy-prod
+    if: failure()
+    steps:
+      - name: Revertir al commit anterior
+        run: echo "Hello World - ssh ubuntu@VM_PROD 'cd /opt/linker && git reset --hard HEAD~1'"
+
+      - name: Restaurar base de datos
+        run: echo "Hello World - restaurar backup /opt/backups/linker-${{ github.sha }}.db"
+
+      - name: Reiniciar servicio
+        run: echo "Hello World - ssh ubuntu@VM_PROD 'sudo systemctl restart linker'"
+
+      - name: Alertar rollback ejecutado
+        run: echo "Hello World - alerta crítica, se ejecutó rollback en producción"
+
+  notify:
+    name: Notificar resultado
+    runs-on: ubuntu-latest
+    needs: [deploy-prod, rollback]
+    if: always()
+    steps:
+      - name: Notificar al equipo
+        run: echo "Hello World - notificación (Slack/correo) del resultado del despliegue a prod"
+
+      - name: Crear release en GitHub
+        run: echo "Hello World - crear GitHub Release con changelog si el despliegue fue exitoso"
