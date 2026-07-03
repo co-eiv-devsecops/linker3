@@ -2,14 +2,12 @@
   "name": "linker",
   "version": "1.0.0",
   "description": "Acortador de URLs monolítico",
-  "main": "server.js",
+  "type": "module",
+  "main": "src/main.ts",
   "scripts": {
-    "start": "node server.js",
-    "start:ts": "node src-ts/main.ts",
-    "test": "node --test",
-    "test:js": "node --test \"test/**/*.test.js\"",
-    "test:ts": "node --test \"test-ts/**/*.test.ts\"",
-    "test:coverage": "node --test --experimental-test-coverage",
+    "start": "node src/main.ts",
+    "test": "node --test \"test/**/*.test.ts\"",
+    "test:coverage": "node --test --experimental-test-coverage \"test/**/*.test.ts\"",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
