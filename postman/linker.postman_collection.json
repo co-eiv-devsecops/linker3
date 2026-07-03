@@ -1,0 +1,136 @@
+{
+  "info": {
+    "name": "Linker API",
+    "description": "Pruebas de API contra una instancia desplegada de Linker (dev/prod).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "shortCode", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "GET / responde la página principal",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.test('content-type html', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('text/html'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "POST /api/shorten crea un enlace",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/shorten",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"url\": \"https://example.com/newman-{{$randomUUID}}\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('status 201', () => pm.response.to.have.status(201));",
+              "const body = pm.response.json();",
+              "pm.test('devuelve short url', () => pm.expect(body.short).to.be.a('string'));",
+              "const code = body.short.split('/').pop();",
+              "pm.collectionVariables.set('shortCode', code);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "POST /api/shorten con URL inválida responde 400",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/shorten",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"url\": \"no-es-una-url\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('status 400', () => pm.response.to.have.status(400));",
+              "pm.test('devuelve error', () => pm.expect(pm.response.json().error).to.be.a('string'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "GET /api/links lista los enlaces",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/links"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.test('es un arreglo', () => pm.expect(pm.response.json()).to.be.an('array'));",
+              "const list = pm.response.json();",
+              "const code = pm.collectionVariables.get('shortCode');",
+              "pm.test('incluye el enlace recién creado', () => pm.expect(list.some(l => l.code === code)).to.be.true);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "GET /:code redirige al destino",
+      "protocolProfileBehavior": { "followRedirects": false },
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/{{shortCode}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('status 302', () => pm.response.to.have.status(302));",
+              "pm.test('incluye Location', () => pm.expect(pm.response.headers.get('Location')).to.be.a('string'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "GET /:code inexistente responde 404",
+      "protocolProfileBehavior": { "followRedirects": false },
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/no-existe-123"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": ["pm.test('status 404', () => pm.response.to.have.status(404));"]
+          }
+        }
+      ]
+    }
+  ]
+}

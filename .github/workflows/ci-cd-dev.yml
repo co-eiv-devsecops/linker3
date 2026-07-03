@@ -33,13 +33,11 @@ jobs:
       - name: Instalar dependencias
         run: npm ci
 
-      - name: Verificar sintaxis (node --check)
-        run: |
-          node --check server.js
-          for f in src/*.js; do node --check "$f"; done
+      - name: Verificar tipos (tsc --noEmit)
+        run: npm run typecheck
 
-      - name: Análisis de estilo
-        run: echo "Hello World - análisis estático de código"
+      - name: Análisis de estilo (Biome)
+        run: npx biome ci .
 
   test:
     name: Pruebas unitarias
@@ -106,7 +104,7 @@ jobs:
 
       - name: Validar arranque de la aplicación
         run: |
-          PORT=3000 DB_PATH=/tmp/linker.db node server.js &
+          PORT=3000 DB_PATH=/tmp/linker.db node src/main.ts &
           SERVER_PID=$!
           for i in $(seq 1 10); do
             curl -sf http://localhost:3000/ > /dev/null && break
@@ -148,10 +146,39 @@ jobs:
       - name: Verificar estado del servicio
         run: echo "Hello World - ssh ubuntu@VM_DEV 'sudo systemctl status linker --no-pager'"
 
+  api-tests:
+    name: Pruebas de API (Newman)
+    runs-on: ubuntu-latest
+    needs: deploy-dev
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Ejecutar colección Postman contra la instancia de dev
+        run: |
+          npx newman run postman/linker.postman_collection.json \
+            --env-var baseUrl=http://dev.n-la-c.app \
+            --reporters cli,junit \
+            --reporter-junit-export newman-report.xml
+
+      - name: Publicar reporte de Newman
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: newman-report-dev-${{ github.sha }}
+          path: newman-report.xml
+
   notify:
     name: Notificar resultado
     runs-on: ubuntu-latest
-    needs: deploy-dev
+    needs: [deploy-dev, api-tests]
     if: always()
     steps:
       - name: Notificar al equipo

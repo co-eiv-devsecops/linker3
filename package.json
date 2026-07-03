@@ -2,10 +2,22 @@
   "name": "linker",
   "version": "1.0.0",
   "description": "Acortador de URLs monolítico",
-  "main": "server.js",
+  "type": "module",
+  "main": "src/main.ts",
   "scripts": {
-    "start": "node server.js",
-    "test": "node --test",
-    "test:coverage": "node --test --experimental-test-coverage"
+    "start": "node src/main.ts",
+    "test": "node --test \"test/**/*.test.ts\"",
+    "test:coverage": "node --test --experimental-test-coverage \"test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
+    "check": "biome check --write .",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.2",
+    "@types/node": "^24.0.0",
+    "husky": "9.1.7",
+    "typescript": "^5.8.0"
   }
 }
