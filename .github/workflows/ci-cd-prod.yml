@@ -22,16 +22,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout del código
-        run: echo "Hello World - checkout del repositorio (actions/checkout@v4)"
+        uses: actions/checkout@v4
 
       - name: Configurar Node.js ${{ env.NODE_VERSION }}
-        run: echo "Hello World - setup de Node.js 22 (actions/setup-node@v4)"
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
 
       - name: Verificar tipos (tsc --noEmit)
-        run: echo "Hello World - npm run typecheck (tsc --noEmit sobre src/ y test/)"
+        run: npm run typecheck
 
       - name: Análisis de estilo (Biome)
-        run: echo "Hello World - npx biome ci . (lint + formato + orden de imports)"
+        run: npx biome ci .
 
   test:
     name: Pruebas unitarias
@@ -39,16 +45,28 @@ jobs:
     needs: lint
     steps:
       - name: Checkout del código
-        run: echo "Hello World - checkout del repositorio"
+        uses: actions/checkout@v4
 
       - name: Configurar Node.js ${{ env.NODE_VERSION }}
-        run: echo "Hello World - setup de Node.js 22 (requerido por node:sqlite)"
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
 
       - name: Ejecutar tests
-        run: echo "Hello World - npm test (node --test sobre test/)"
+        run: npm test
 
       - name: Reporte de cobertura
-        run: echo "Hello World - npm run test:coverage (umbral mínimo exigido en prod)"
+        run: npm run test:coverage | tee coverage.txt
+
+      - name: Publicar resultados de tests
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-prod-${{ github.sha }}
+          path: coverage.txt
 
   security-scan:
     name: Escaneo de seguridad
@@ -76,16 +94,39 @@ jobs:
     needs: [test, security-scan]
     steps:
       - name: Checkout del código
-        run: echo "Hello World - checkout del repositorio"
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
 
       - name: Validar arranque de la aplicación
-        run: echo "Hello World - arranque de humo con node src/main.ts (PORT=3000, DB_PATH=/tmp/linker.db)"
+        run: |
+          PORT=3000 DB_PATH=/tmp/linker.db node src/main.ts &
+          SERVER_PID=$!
+          for i in $(seq 1 10); do
+            curl -sf http://localhost:3000/ > /dev/null && break
+            sleep 1
+          done
+          curl -sf http://localhost:3000/ > /dev/null
+          kill $SERVER_PID
 
-      - name: Empaquetar artefacto de release
-        run: echo "Hello World - empaquetar src/, public/, package.json"
+      - name: Construir imagen Docker (empaquetamiento para Linux)
+        run: docker build -f infra/docker/Dockerfile -t ${{ env.APP_NAME }}:${{ github.sha }} .
 
-      - name: Versionar y subir artefacto
-        run: echo "Hello World - actions/upload-artifact@v4 (linker-prod-${{ github.sha }})"
+      - name: Empaquetar imagen como artefacto
+        run: docker save ${{ env.APP_NAME }}:${{ github.sha }} -o ${{ env.APP_NAME }}-${{ github.sha }}.tar
+
+      - name: Subir artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: linker-prod-${{ github.sha }}
+          path: ${{ env.APP_NAME }}-${{ github.sha }}.tar
 
   plan-infra:
     name: Terraform plan (Oracle Cloud)
@@ -128,10 +169,38 @@ jobs:
       - name: Verificar estado del servicio
         run: echo "Hello World - ssh ubuntu@VM_PROD 'sudo systemctl status linker --no-pager'"
 
+  api-tests:
+    name: Pruebas de API (Newman)
+    runs-on: ubuntu-latest
+    needs: deploy-prod
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Ejecutar colección Postman contra la instancia de producción
+        run: |
+          npx newman run postman/linker.postman_collection.json \
+            --env-var baseUrl=${{ env.PROD_URL }} \
+            --reporters cli,junit \
+            --reporter-junit-export newman-report.xml
+
+      - name: Publicar reporte de Newman
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: newman-report-prod-${{ github.sha }}
+          path: newman-report.xml
+
   rollback:
     name: Rollback automático
     runs-on: ubuntu-latest
-    needs: deploy-prod
+    needs: [deploy-prod, api-tests]
     if: failure()
     steps:
       - name: Revertir al commit anterior
@@ -149,7 +218,7 @@ jobs:
   notify:
     name: Notificar resultado
     runs-on: ubuntu-latest
-    needs: [deploy-prod, rollback]
+    needs: [deploy-prod, api-tests, rollback]
     if: always()
     steps:
       - name: Notificar al equipo
