@@ -1,7 +1,7 @@
 #!/bin/bash
 # Provisiona una VM Ubuntu 22.04+ para Linker.
 # Copia exacta del script embebido en cloud-init.yaml (bajo write_files) — se
-# mantiene también aquí, suelto, para poder probarlo con `bash provision.sh`
+# mantiene también aquí, suelto, para poder probarlo con `bash infra/scripts/provision.sh`
 # sin tener que levantar una VM real. Si edita uno, sincronice el otro.
 set -euo pipefail
 

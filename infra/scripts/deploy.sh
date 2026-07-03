@@ -1,5 +1,5 @@
 #!/bin/bash
-# Uso: bash deploy.sh
+# Uso: bash infra/scripts/deploy.sh (ejecutar desde la raíz del repo)
 # Prerequisito: VM provisionada con cloud-init.yaml
 
 set -e
