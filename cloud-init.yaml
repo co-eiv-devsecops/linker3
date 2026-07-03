@@ -1,7 +1,7 @@
 #cloud-config
 # Provisiona una VM Ubuntu 22.04+ para Linker.
 # Uso: pegue este contenido en el campo "User Data" al crear la instancia.
-# Personalización: edite REPO y BASE_URL en provision.sh antes de usar.
+# Personalización: edite REPO y BASE_URL en infra/scripts/provision.sh antes de usar.
 # Requiere Node.js >= 22.13 (node:sqlite deja de necesitar --experimental-sqlite
 # a partir de esa versión); setup_22.x de NodeSource ya resuelve a esa serie.
 
@@ -27,7 +27,7 @@ write_files:
       User=ubuntu
       WorkingDirectory=/opt/linker
       EnvironmentFile=/opt/linker/.env
-      ExecStart=/usr/bin/node server.js
+      ExecStart=/usr/bin/node src/main.ts
       Restart=on-failure
       RestartSec=5
 

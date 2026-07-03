@@ -1,0 +1,8 @@
+files=$(git diff --name-only --cached --diff-filter=ACMR -- '*.ts' '*.json')
+
+if [ -n "$files" ]; then
+  echo "$files" | xargs npx biome check --write --no-errors-on-unmatched
+  echo "$files" | xargs git add
+fi
+
+npm run typecheck

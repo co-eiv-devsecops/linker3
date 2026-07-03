@@ -23,7 +23,7 @@ Acortador de URLs en Node.js con SQLite integrado.
 git clone https://github.com/co-eiv-devsecops/linker3.git
 cd linker3
 cp .env.example .env   # ajuste BASE_URL si es necesario
-node server.js
+npm start
 ```
 
 Abrir en el navegador: <http://localhost:3000>
@@ -73,19 +73,28 @@ sqlite3 linker.db < scripts/init-db.sql
 ```text
 linker3/
 ├── src/
-│   ├── db.js          # Capa de acceso a datos (SQLite)
-│   └── links.js       # Lógica de negocio (acortar, resolver, alias)
+│   ├── domain/         # Entidades y contratos (Link, LinkRepository, CodeGenerator, errores)
+│   ├── application/    # Casos de uso (LinkService, LinkValidator, DTOs)
+│   ├── infrastructure/ # Adaptadores (SqliteLinkRepository, RandomCodeGenerator)
+│   ├── presentation/   # HTTP (Router, LinkController, utilidades de respuesta)
+│   ├── config.ts       # Configuración desde variables de entorno
+│   ├── container.ts    # Composition root (arma la app)
+│   └── main.ts         # Punto de entrada
+├── test/               # Pruebas unitarias e de integración (node --test)
 ├── public/
 │   └── index.html     # Interfaz web
 ├── .devcontainer/
 │   └── devcontainer.json  # Entorno de desarrollo en contenedor
 ├── scripts/
 │   └── init-db.sql    # Reproduce la BD (esquema + datos de ejemplo)
-├── server.js          # Servidor HTTP y ruteo
 ├── cloud-init.yaml    # Provisionamiento de VM (paridad de entornos)
-├── provision.sh       # Script de provisión (copia de la sección write_files de cloud-init.yaml, para probar sin VM)
-├── deploy.sh          # Script de despliegue via git pull
-├── infra/             # IaC: terraform-oracle/ (VM real en OCI), terraform/ + docker/ (demo local)
+├── infra/
+│   ├── scripts/
+│   │   ├── provision.sh   # Script de provisión (copia de la sección write_files de cloud-init.yaml, para probar sin VM)
+│   │   └── deploy.sh      # Script de despliegue via git pull
+│   ├── terraform-oracle/  # VM real en OCI
+│   ├── terraform/         # Demo local de paridad
+│   └── docker/            # Imagen usada por la demo local
 ├── .env.example       # Plantilla de variables de entorno
 └── package.json
 ```
@@ -99,7 +108,7 @@ El archivo [`cloud-init.yaml`](cloud-init.yaml) permite crear una VM lista para 
 ### Qué instala y configura
 
 - Node.js 22 (via NodeSource)
-- Clona el repositorio en `/opt/linker` (vía [`provision.sh`](provision.sh), embebido también en `cloud-init.yaml`)
+- Clona el repositorio en `/opt/linker` (vía [`infra/scripts/provision.sh`](infra/scripts/provision.sh), embebido también en `cloud-init.yaml`)
 - Crea el servicio `linker` con systemd (reinicio automático)
 - Configura Nginx como proxy inverso en el puerto 80
 
@@ -109,7 +118,7 @@ El archivo [`cloud-init.yaml`](cloud-init.yaml) permite crear una VM lista para 
 2. En la pestaña **"Initialization script"**, pegue el contenido de `cloud-init.yaml`
 3. Lance la instancia — el aprovisionamiento es automático (~3-5 min)
 
-> **Personalización:** antes de usar, edite `REPO` y `BASE_URL` dentro del script en `cloud-init.yaml` (sección `write_files` → `/opt/provision.sh`) con el repositorio y el dominio/IP de su VM.
+> **Personalización:** antes de usar, edite `REPO` y `BASE_URL` dentro del script en `cloud-init.yaml` (sección `write_files` → `/opt/provision.sh`, cuya copia local es [`infra/scripts/provision.sh`](infra/scripts/provision.sh)) con el repositorio y el dominio/IP de su VM.
 
 ### HTTPS (paso manual)
 
@@ -155,7 +164,7 @@ terraform apply
 Una vez la VM está provisionada con `cloud-init.yaml`, los deploys son un `git pull`:
 
 ```bash
-bash deploy.sh
+bash infra/scripts/deploy.sh
 ```
 
 El script hace `git pull` en `/opt/linker`, reinicia el servicio y muestra el estado.
@@ -177,7 +186,7 @@ La carpeta [`.devcontainer/`](.devcontainer/) define un entorno de desarrollo re
 2. Cuando aparezca el aviso _"Reopen in Container"_, haga clic en él
    (o use el comando `Dev Containers: Reopen in Container`)
 3. VS Code reconstruye el entorno con Node.js 22 y reenvía el puerto 3000
-4. Ejecute `node server.js` — la app corre en <http://localhost:3000>
+4. Ejecute `npm start` — la app corre en <http://localhost:3000>
 
 El contenedor usa la imagen oficial `mcr.microsoft.com/devcontainers/javascript-node:22-bookworm`. Las variables de entorno `PORT=3000` y `BASE_URL=http://localhost:3000` se inyectan automáticamente.
 

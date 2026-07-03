@@ -1,0 +1,77 @@
+name: Reporte de bug
+description: Algo no funciona como debería
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gracias por reportar. Antes de continuar, busca en los
+        [issues existentes](../issues?q=is%3Aissue) por si ya está reportado.
+
+  - type: textarea
+    id: descripcion
+    attributes:
+      label: Descripción del bug
+      description: Qué pasa y qué esperabas que pasara.
+      placeholder: "Al acortar una URL con alias válido, la API responde 400 en lugar de 201."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduccion
+    attributes:
+      label: Pasos para reproducir
+      description: Pasos mínimos y concretos. Si aplica, incluye el `curl` exacto.
+      placeholder: |
+        1. Arrancar con `node server.js`
+        2. `curl -X POST localhost:3000/api/shorten -d '{"url":"https://example.com","alias":"mi-alias"}'`
+        3. Observar la respuesta
+    validations:
+      required: true
+
+  - type: textarea
+    id: comportamiento-esperado
+    attributes:
+      label: Comportamiento esperado
+      placeholder: "Debería responder 201 con { \"short\": \"...\" }"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / salida relevante
+      description: Salida de consola, respuesta HTTP, stack trace. Se formatea como código automáticamente.
+      render: shell
+
+  - type: dropdown
+    id: entorno
+    attributes:
+      label: Entorno donde ocurre
+      options:
+        - Local (node server.js)
+        - Producción (https://3.n-la-c.app)
+        - Contenedor local (infra/terraform + docker)
+        - Otro (detallar en la descripción)
+    validations:
+      required: true
+
+  - type: input
+    id: version-node
+    attributes:
+      label: Versión de Node.js
+      description: Salida de `node --version` (se requiere >= 22).
+      placeholder: "v22.13.0"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirmaciones
+    attributes:
+      label: Confirmaciones
+      options:
+        - label: Busqué en los issues existentes y no está reportado
+          required: true
+        - label: Puedo reproducirlo de forma consistente
+          required: false
