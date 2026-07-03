@@ -8,6 +8,7 @@
     "start": "node src/main.ts",
     "test": "node --test \"test/**/*.test.ts\"",
     "test:coverage": "node --test --experimental-test-coverage \"test/**/*.test.ts\"",
+    "test:coverage:check": "node --test --experimental-test-coverage --test-coverage-lines=85 --test-coverage-branches=85 --test-coverage-functions=85 \"test/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "lint": "biome lint .",
     "format": "biome format --write .",
