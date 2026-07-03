@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
+import { ConflictError } from "../domain/errors.ts";
 import type { Link } from "../domain/Link.ts";
 import type { LinkRepository } from "../domain/LinkRepository.ts";
-import { ConflictError } from "../domain/errors.ts";
 
 export class SqliteLinkRepository implements LinkRepository {
   private readonly db: DatabaseSync;
@@ -24,9 +24,7 @@ export class SqliteLinkRepository implements LinkRepository {
 
   save(code: string, url: string): void {
     try {
-      this.db
-        .prepare("INSERT INTO links (code, url) VALUES (?, ?)")
-        .run(code, url);
+      this.db.prepare("INSERT INTO links (code, url) VALUES (?, ?)").run(code, url);
     } catch (e) {
       if (e instanceof Error && e.message.includes("UNIQUE constraint")) {
         throw new ConflictError("Código ya existe");
@@ -36,9 +34,7 @@ export class SqliteLinkRepository implements LinkRepository {
   }
 
   incrementVisits(code: string): void {
-    this.db
-      .prepare("UPDATE links SET visits = visits + 1 WHERE code = ?")
-      .run(code);
+    this.db.prepare("UPDATE links SET visits = visits + 1 WHERE code = ?").run(code);
   }
 
   findAll(): Link[] {

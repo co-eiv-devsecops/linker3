@@ -1,10 +1,10 @@
-import { createServer, type Server } from "node:http";
 import { readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { createServer, type Server } from "node:http";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AppConfig } from "./config.ts";
 import { LinkService } from "./application/LinkService.ts";
 import { LinkValidator } from "./application/LinkValidator.ts";
+import type { AppConfig } from "./config.ts";
 import { RandomCodeGenerator } from "./infrastructure/RandomCodeGenerator.ts";
 import { SqliteLinkRepository } from "./infrastructure/SqliteLinkRepository.ts";
 import { LinkController } from "./presentation/LinkController.ts";

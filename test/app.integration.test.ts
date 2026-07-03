@@ -1,7 +1,7 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import type { Server } from "node:http";
-import { createApp, type App } from "../src/container.ts";
+import test from "node:test";
+import { type App, createApp } from "../src/container.ts";
 
 const HOME = "<html><body>linker</body></html>";
 

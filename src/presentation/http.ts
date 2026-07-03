@@ -1,20 +1,12 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { ValidationError } from "../domain/errors.ts";
 
-export function sendJson(
-  res: ServerResponse,
-  status: number,
-  body: unknown
-): void {
+export function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { "Content-Type": "application/json" });
   res.end(JSON.stringify(body));
 }
 
-export function sendHtml(
-  res: ServerResponse,
-  status: number,
-  html: string
-): void {
+export function sendHtml(res: ServerResponse, status: number, html: string): void {
   res.writeHead(status, { "Content-Type": "text/html" });
   res.end(html);
 }

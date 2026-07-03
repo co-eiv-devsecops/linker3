@@ -1,13 +1,13 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { Router } from "../src/presentation/Router.ts";
-import { LinkController } from "../src/presentation/LinkController.ts";
+import test from "node:test";
 import { LinkService } from "../src/application/LinkService.ts";
-import { SqliteLinkRepository } from "../src/infrastructure/SqliteLinkRepository.ts";
-import { RandomCodeGenerator } from "../src/infrastructure/RandomCodeGenerator.ts";
-import type { LinkRepository } from "../src/domain/LinkRepository.ts";
 import type { Link } from "../src/domain/Link.ts";
+import type { LinkRepository } from "../src/domain/LinkRepository.ts";
+import { RandomCodeGenerator } from "../src/infrastructure/RandomCodeGenerator.ts";
+import { SqliteLinkRepository } from "../src/infrastructure/SqliteLinkRepository.ts";
+import { LinkController } from "../src/presentation/LinkController.ts";
+import { Router } from "../src/presentation/Router.ts";
 
 class FakeResponse {
   status = 0;
@@ -25,8 +25,7 @@ class FakeResponse {
   }
 }
 
-const asReq = (method: string, url: string) =>
-  ({ method, url } as IncomingMessage);
+const asReq = (method: string, url: string) => ({ method, url }) as IncomingMessage;
 const asRes = (fake: FakeResponse) => fake as unknown as ServerResponse;
 
 const makeRouter = (t: { after(fn: () => void): void }, homePage = "") => {
@@ -82,7 +81,7 @@ test("un AppError se traduce a su estado HTTP y mensaje JSON", async (t) => {
   assert.deepEqual(JSON.parse(res.body), { error: "No encontrado" });
 });
 
-test("un error inesperado responde 500 sin filtrar detalles", async (t) => {
+test("un error inesperado responde 500 sin filtrar detalles", async () => {
   const brokenRepo: LinkRepository = {
     findByCode(): Link | null {
       return null;

@@ -30,8 +30,8 @@ jobs:
       - name: Verificar tipos (tsc --noEmit)
         run: echo "Hello World - npm run typecheck (tsc --noEmit sobre src/ y test/)"
 
-      - name: Análisis de estilo
-        run: echo "Hello World - análisis estático de código"
+      - name: Análisis de estilo (Biome)
+        run: echo "Hello World - npx biome ci . (lint + formato + orden de imports)"
 
   test:
     name: Pruebas unitarias

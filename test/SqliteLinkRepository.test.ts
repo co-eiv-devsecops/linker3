@@ -1,7 +1,7 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { SqliteLinkRepository } from "../src/infrastructure/SqliteLinkRepository.ts";
+import test from "node:test";
 import { ConflictError } from "../src/domain/errors.ts";
+import { SqliteLinkRepository } from "../src/infrastructure/SqliteLinkRepository.ts";
 
 const makeRepo = (t: { after(fn: () => void): void }) => {
   const repo = new SqliteLinkRepository(":memory:");
@@ -29,10 +29,7 @@ test("save lanza ConflictError con código duplicado", (t) => {
   const repo = makeRepo(t);
   repo.save("dup", "https://nodejs.org");
 
-  assert.throws(
-    () => repo.save("dup", "https://www.typescriptlang.org"),
-    ConflictError
-  );
+  assert.throws(() => repo.save("dup", "https://www.typescriptlang.org"), ConflictError);
 });
 
 test("incrementVisits incrementa el contador solo del código dado", (t) => {

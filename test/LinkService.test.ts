@@ -1,22 +1,15 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { LinkService } from "../src/application/LinkService.ts";
-import { SqliteLinkRepository } from "../src/infrastructure/SqliteLinkRepository.ts";
 import type { CodeGenerator } from "../src/domain/CodeGenerator.ts";
-import {
-  ConflictError,
-  NotFoundError,
-  ValidationError,
-} from "../src/domain/errors.ts";
+import { ConflictError, NotFoundError, ValidationError } from "../src/domain/errors.ts";
+import { SqliteLinkRepository } from "../src/infrastructure/SqliteLinkRepository.ts";
 
 const fixedGenerator = (code: string): CodeGenerator => ({
   generate: () => code,
 });
 
-const makeService = (
-  t: { after(fn: () => void): void },
-  code = "cafe1234"
-) => {
+const makeService = (t: { after(fn: () => void): void }, code = "cafe1234") => {
   const repo = new SqliteLinkRepository(":memory:");
   t.after(() => repo.close());
   return { repo, service: new LinkService(repo, fixedGenerator(code)) };
@@ -68,8 +61,7 @@ test("shorten lanza ConflictError si el alias ya está en uso", (t) => {
 
   assert.throws(
     () => service.shorten({ url: "https://nodejs.org", alias: "tomado" }),
-    (e: unknown) =>
-      e instanceof ConflictError && e.message === "El alias ya está en uso"
+    (e: unknown) => e instanceof ConflictError && e.message === "El alias ya está en uso"
   );
 });
 
@@ -77,10 +69,7 @@ test("shorten propaga ConflictError del repositorio en colisión de código gene
   const { repo, service } = makeService(t, "colision");
   repo.save("colision", "https://www.wikipedia.org");
 
-  assert.throws(
-    () => service.shorten({ url: "https://nodejs.org" }),
-    ConflictError
-  );
+  assert.throws(() => service.shorten({ url: "https://nodejs.org" }), ConflictError);
 });
 
 test("resolve devuelve la URL e incrementa visitas", (t) => {

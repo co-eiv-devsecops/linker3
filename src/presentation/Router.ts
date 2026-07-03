@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { AppError } from "../domain/errors.ts";
-import type { LinkController } from "./LinkController.ts";
 import { sendHtml, sendJson } from "./http.ts";
+import type { LinkController } from "./LinkController.ts";
 
 export class Router {
   private readonly controller: LinkController;
@@ -24,10 +24,7 @@ export class Router {
     }
   }
 
-  private async dispatch(
-    req: IncomingMessage,
-    res: ServerResponse
-  ): Promise<void> {
+  private async dispatch(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const { method = "GET", url = "/" } = req;
 
     if (url === "/" || url === "/index.html") {

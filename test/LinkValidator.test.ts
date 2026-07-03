@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { LinkValidator } from "../src/application/LinkValidator.ts";
 import { ValidationError } from "../src/domain/errors.ts";
 
@@ -13,7 +13,14 @@ test("assertValidUrl acepta URLs http y https", () => {
 });
 
 test("assertValidUrl rechaza URLs inválidas con ValidationError", () => {
-  for (const bad of ["", "ftp://ftp.mozilla.org", "www.github.com", null, undefined, 42]) {
+  for (const bad of [
+    "",
+    "ftp://ftp.mozilla.org",
+    "www.github.com",
+    null,
+    undefined,
+    42,
+  ]) {
     assert.throws(() => validator.assertValidUrl(bad), ValidationError);
   }
 });

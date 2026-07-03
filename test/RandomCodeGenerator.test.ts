@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { RandomCodeGenerator } from "../src/infrastructure/RandomCodeGenerator.ts";
 
 test("genera códigos hexadecimales de 8 caracteres por defecto", () => {

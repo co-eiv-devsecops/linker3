@@ -36,8 +36,8 @@ jobs:
       - name: Verificar tipos (tsc --noEmit)
         run: npm run typecheck
 
-      - name: Análisis de estilo
-        run: echo "Hello World - análisis estático de código"
+      - name: Análisis de estilo (Biome)
+        run: npx biome ci .
 
   test:
     name: Pruebas unitarias

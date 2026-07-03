@@ -1,7 +1,7 @@
 import type { CodeGenerator } from "../domain/CodeGenerator.ts";
+import { ConflictError, NotFoundError } from "../domain/errors.ts";
 import type { Link } from "../domain/Link.ts";
 import type { LinkRepository } from "../domain/LinkRepository.ts";
-import { ConflictError, NotFoundError } from "../domain/errors.ts";
 import type { ShortenRequest, ShortenResult } from "./dto.ts";
 import { LinkValidator } from "./LinkValidator.ts";
 
@@ -28,9 +28,7 @@ export class LinkService {
       this.validator.assertValidAlias(request.alias);
     }
 
-    const code = useAlias
-      ? (request.alias as string)
-      : this.codeGenerator.generate();
+    const code = useAlias ? (request.alias as string) : this.codeGenerator.generate();
 
     if (useAlias && this.repository.findByCode(code)) {
       throw new ConflictError("El alias ya está en uso");
