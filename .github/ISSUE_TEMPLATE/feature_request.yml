@@ -1,0 +1,53 @@
+name: Propuesta de funcionalidad
+description: Sugerir una mejora o funcionalidad nueva
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+body:
+  - type: textarea
+    id: problema
+    attributes:
+      label: Problema o necesidad
+      description: Qué problema resuelve esta propuesta. Céntrate en el problema, no en la solución.
+      placeholder: "Como usuario quiero ver estadísticas de visitas por día para saber cuándo se usan mis enlaces."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solucion
+    attributes:
+      label: Solución propuesta
+      description: Cómo imaginas que debería funcionar (API, UI, comportamiento).
+      placeholder: "Un endpoint GET /api/links/:code/stats que devuelva visitas agrupadas por fecha."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternativas
+    attributes:
+      label: Alternativas consideradas
+      description: Otras formas de resolverlo y por qué las descartaste.
+
+  - type: dropdown
+    id: alcance
+    attributes:
+      label: Área afectada
+      multiple: true
+      options:
+        - API (server.js / src)
+        - Frontend (public/index.html)
+        - Base de datos / esquema
+        - Infraestructura / despliegue (infra/, cloud-init, deploy.sh)
+        - CI/CD (.github/workflows)
+        - Documentación
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirmaciones
+    attributes:
+      label: Confirmaciones
+      options:
+        - label: Busqué en los issues existentes y no hay una propuesta similar
+          required: true
+        - label: Estoy dispuesto/a a implementarla en un PR
+          required: false

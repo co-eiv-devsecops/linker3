@@ -1,0 +1,49 @@
+name: Tarea técnica
+description: Deuda técnica, refactor, mantenimiento o mejora interna sin cambio funcional
+title: "[Task]: "
+labels: ["chore", "triage"]
+body:
+  - type: textarea
+    id: contexto
+    attributes:
+      label: Contexto
+      description: Qué situación actual motiva esta tarea y por qué merece hacerse.
+      placeholder: "El manejo de errores está duplicado entre server.js y src/links.js."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alcance
+    attributes:
+      label: Alcance de la tarea
+      description: Qué entra y qué NO entra en esta tarea.
+      placeholder: |
+        Incluye: extraer el manejo de errores a un módulo común.
+        No incluye: cambiar el contrato HTTP.
+    validations:
+      required: true
+
+  - type: textarea
+    id: criterios
+    attributes:
+      label: Criterios de aceptación
+      description: Lista verificable de condiciones para dar la tarea por terminada.
+      placeholder: |
+        - [ ] Los tests existentes siguen pasando
+        - [ ] No cambia ninguna respuesta de la API
+    validations:
+      required: true
+
+  - type: dropdown
+    id: tipo
+    attributes:
+      label: Tipo de tarea
+      options:
+        - Refactor
+        - Deuda técnica
+        - Dependencias / tooling
+        - Infraestructura / CI-CD
+        - Documentación
+        - Tests
+    validations:
+      required: true

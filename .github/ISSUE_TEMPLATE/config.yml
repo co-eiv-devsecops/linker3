@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Preguntas y discusión
+    url: https://github.com/co-eiv-devsecops/linker3/discussions
+    about: Para dudas de uso o ideas sin definir, abre una discusión en lugar de un issue.
+  - name: Reportar una vulnerabilidad
+    url: https://github.com/co-eiv-devsecops/linker3/security/advisories/new
+    about: No abras issues públicos para problemas de seguridad; usa un aviso privado.
