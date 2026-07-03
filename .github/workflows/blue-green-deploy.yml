@@ -1,0 +1,161 @@
+name: Ejemplo Blue Green (Echo)
+
+on:
+  workflow_dispatch:
+    inputs:
+      color_objetivo:
+        description: "Color al que quieres cambiar trafico"
+        required: true
+        type: choice
+        options:
+          - verde
+          - azul
+      simular_fallo_verde:
+        description: "Simular fallo en verde para probar rollback"
+        required: true
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+concurrency:
+  group: blue-green-demo
+  cancel-in-progress: false
+
+jobs:
+  preparar:
+    name: Preparar despliegue
+    runs-on: ubuntu-latest
+    outputs:
+      color_objetivo: ${{ steps.parametros.outputs.color_objetivo }}
+      simular_fallo_verde: ${{ steps.parametros.outputs.simular_fallo_verde }}
+    steps:
+      - name: Mostrar parametros de ejecucion
+        id: parametros
+        run: |
+          echo "Iniciando pipeline de ejemplo blue/green"
+          echo "Color objetivo: ${{ github.event.inputs.color_objetivo }}"
+          echo "Simular fallo en verde: ${{ github.event.inputs.simular_fallo_verde }}"
+          echo "color_objetivo=${{ github.event.inputs.color_objetivo }}" >> "$GITHUB_OUTPUT"
+          echo "simular_fallo_verde=${{ github.event.inputs.simular_fallo_verde }}" >> "$GITHUB_OUTPUT"
+
+  desplegar-azul:
+    name: Desplegar en azul (simulado)
+    runs-on: ubuntu-latest
+    needs: preparar
+    environment:
+      name: dev
+    steps:
+      - name: Simular despliegue azul
+        run: |
+          echo "Desplegando version candidata en entorno AZUL"
+          echo "Validando salud del entorno azul"
+          echo "Resultado: azul listo"
+
+  desplegar-verde:
+    name: Desplegar en verde (simulado)
+    runs-on: ubuntu-latest
+    needs: preparar
+    environment:
+      name: dev
+    steps:
+      - name: Simular despliegue verde
+        run: |
+          echo "Desplegando version candidata en entorno VERDE"
+          echo "Ejecutando pruebas de humo en verde"
+          echo "Resultado: verde listo"
+
+  aprobar-cambio-trafico:
+    name: Aprobacion manual para cambio de trafico
+    runs-on: ubuntu-latest
+    needs: [desplegar-azul, desplegar-verde, preparar]
+    environment:
+      name: prod
+    steps:
+      - name: Solicitar aprobacion
+        run: |
+          echo "Esperando aprobacion manual del entorno 'aprobacion-cambio'"
+          echo "Una vez aprobada, se cambia trafico a ${{ needs.preparar.outputs.color_objetivo }}"
+
+  cambiar-trafico:
+    name: Cambiar trafico azul/verde (simulado)
+    runs-on: ubuntu-latest
+    needs: [aprobar-cambio-trafico, preparar]
+    environment:
+      name: prod
+    steps:
+      - name: Simular cambio de direccion
+        run: |
+          if [ "${{ needs.preparar.outputs.color_objetivo }}" = "verde" ]; then
+            echo "Cambiando trafico de AZUL a VERDE"
+          else
+            echo "Cambiando trafico de VERDE a AZUL"
+          fi
+          echo "Cambio de trafico completado"
+
+  validar-despues-del-cambio:
+    name: Validar servicio despues del cambio (simulado)
+    runs-on: ubuntu-latest
+    needs: [cambiar-trafico, preparar]
+    steps:
+      - name: Simular verificacion final
+        run: |
+          echo "Validando servicio luego del cambio de trafico"
+          if [ "${{ needs.preparar.outputs.color_objetivo }}" = "verde" ] && [ "${{ needs.preparar.outputs.simular_fallo_verde }}" = "true" ]; then
+            echo "Se detecto fallo luego de mover trafico a verde"
+            exit 1
+          fi
+          echo "Validacion final exitosa"
+
+  aprobar-rollback:
+    name: Aprobacion manual para rollback
+    runs-on: ubuntu-latest
+    needs: [validar-despues-del-cambio, preparar]
+    if: always() && needs.preparar.outputs.color_objetivo == 'verde' && needs.validar-despues-del-cambio.result == 'failure'
+    environment:
+      name: prod
+    steps:
+      - name: Solicitar aprobacion de rollback
+        run: |
+          echo "Se requiere aprobacion manual para rollback a AZUL"
+          echo "Aprobar entorno 'aprobacion-rollback' para continuar"
+
+  rollback-a-azul:
+    name: Rollback a azul (simulado)
+    runs-on: ubuntu-latest
+    needs: [aprobar-rollback]
+    if: always() && needs.aprobar-rollback.result == 'success'
+    environment:
+      name: prod
+    steps:
+      - name: Simular rollback
+        run: |
+          echo "Iniciando rollback"
+          echo "Restaurando trafico a AZUL"
+          echo "Rollback completado"
+
+  resumen:
+    name: Resumen del flujo
+    runs-on: ubuntu-latest
+    needs:
+      - preparar
+      - desplegar-azul
+      - desplegar-verde
+      - aprobar-cambio-trafico
+      - cambiar-trafico
+      - validar-despues-del-cambio
+      - aprobar-rollback
+      - rollback-a-azul
+    if: always()
+    steps:
+      - name: Mostrar resumen
+        run: |
+          echo "Resumen de pipeline blue/green de ejemplo"
+          echo "Objetivo: ${{ needs.preparar.outputs.color_objetivo }}"
+          echo "Despliegue azul: ${{ needs.desplegar-azul.result }}"
+          echo "Despliegue verde: ${{ needs.desplegar-verde.result }}"
+          echo "Aprobacion cambio: ${{ needs.aprobar-cambio-trafico.result }}"
+          echo "Cambio de trafico: ${{ needs.cambiar-trafico.result }}"
+          echo "Validacion final: ${{ needs.validar-despues-del-cambio.result }}"
+          echo "Aprobacion rollback: ${{ needs.aprobar-rollback.result }}"
+          echo "Rollback: ${{ needs.rollback-a-azul.result }}"
