@@ -5,7 +5,15 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "start:ts": "node src-ts/main.ts",
     "test": "node --test",
-    "test:coverage": "node --test --experimental-test-coverage"
+    "test:js": "node --test \"test/**/*.test.js\"",
+    "test:ts": "node --test \"test-ts/**/*.test.ts\"",
+    "test:coverage": "node --test --experimental-test-coverage",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.0"
   }
 }
