@@ -1,6 +1,8 @@
 name: Ejemplo Blue Green (Echo)
 
 on:
+  push:
+    branches: [feature/blue-green-deployment]
   workflow_dispatch:
     inputs:
       color_objetivo:
