@@ -33,10 +33,8 @@ jobs:
       - name: Instalar dependencias
         run: npm ci
 
-      - name: Verificar sintaxis (node --check)
-        run: |
-          node --check server.js
-          for f in src/*.js; do node --check "$f"; done
+      - name: Verificar tipos (tsc --noEmit)
+        run: npm run typecheck
 
       - name: Análisis de estilo
         run: echo "Hello World - análisis estático de código"
@@ -106,7 +104,7 @@ jobs:
 
       - name: Validar arranque de la aplicación
         run: |
-          PORT=3000 DB_PATH=/tmp/linker.db node server.js &
+          PORT=3000 DB_PATH=/tmp/linker.db node src/main.ts &
           SERVER_PID=$!
           for i in $(seq 1 10); do
             curl -sf http://localhost:3000/ > /dev/null && break

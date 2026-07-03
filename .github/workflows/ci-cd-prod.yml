@@ -27,8 +27,8 @@ jobs:
       - name: Configurar Node.js ${{ env.NODE_VERSION }}
         run: echo "Hello World - setup de Node.js 22 (actions/setup-node@v4)"
 
-      - name: Verificar sintaxis (node --check)
-        run: echo "Hello World - node --check server.js src/*.js"
+      - name: Verificar tipos (tsc --noEmit)
+        run: echo "Hello World - npm run typecheck (tsc --noEmit sobre src/ y test/)"
 
       - name: Análisis de estilo
         run: echo "Hello World - análisis estático de código"
@@ -79,10 +79,10 @@ jobs:
         run: echo "Hello World - checkout del repositorio"
 
       - name: Validar arranque de la aplicación
-        run: echo "Hello World - arranque de humo con node server.js (PORT=3000, DB_PATH=/tmp/linker.db)"
+        run: echo "Hello World - arranque de humo con node src/main.ts (PORT=3000, DB_PATH=/tmp/linker.db)"
 
       - name: Empaquetar artefacto de release
-        run: echo "Hello World - empaquetar server.js, src/, public/, package.json"
+        run: echo "Hello World - empaquetar src/, public/, package.json"
 
       - name: Versionar y subir artefacto
         run: echo "Hello World - actions/upload-artifact@v4 (linker-prod-${{ github.sha }})"
