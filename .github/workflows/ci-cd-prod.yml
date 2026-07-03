@@ -59,8 +59,8 @@ jobs:
       - name: Ejecutar tests
         run: npm test
 
-      - name: Reporte de cobertura
-        run: npm run test:coverage | tee coverage.txt
+      - name: Reporte de cobertura (bloquea si < 85%)
+        run: npm run test:coverage:check | tee coverage.txt
 
       - name: Publicar resultados de tests
         uses: actions/upload-artifact@v4

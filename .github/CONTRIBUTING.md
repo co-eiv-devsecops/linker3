@@ -52,6 +52,12 @@ Todo PR debe llegar con tests en verde. Si agregas comportamiento, agrega
 tests que lo cubran (unitarios en la capa correspondiente; ver
 `src-ts/README.md` para la arquitectura).
 
+### Cobertura
+
+El CI (`npm run test:coverage:check`) usa los umbrales nativos del test
+runner de Node (`--test-coverage-lines/branches/functions`) y falla el
+pipeline si la cobertura baja del 85% en líneas, ramas o funciones.
+
 ## Convenciones de código
 
 - **Frontend** (`public/index.html`): construir el DOM con
@@ -70,3 +76,8 @@ tests que lo cubran (unitarios en la capa correspondiente; ver
 Usa los formularios de issue (bug, funcionalidad, tarea técnica). Para
 vulnerabilidades de seguridad **no abras un issue público**: sigue
 [SECURITY.md](SECURITY.md).
+
+## Código de conducta
+
+Participar en este proyecto implica aceptar el
+[Código de conducta](CODE_OF_CONDUCT.md).
