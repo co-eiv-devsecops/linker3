@@ -29,10 +29,9 @@
 
 \begin{document}
 
-% ── Encabezado ─────────────────────────────────────────────────────────────────
 \begin{center}
   {\LARGE \textbf{Linker}} \\[6pt]
-  {\large Guía de Instalación y Despliegue} \\[4pt]
+  {\large Guía técnica de instalación, desarrollo y despliegue} \\[4pt]
   \small Diego Cardenas \quad Samuel Albarracin \quad Carlos Barrero \quad Isaac Palomo
 \end{center}
 
@@ -40,162 +39,152 @@
 \hrule
 \vspace{14pt}
 
-% ── 1. Código fuente ───────────────────────────────────────────────────────────
-\section{1. Acceder al código fuente}
+\section{1. Contexto}
 
-Clonar el repositorio desde GitHub:
+Esta guía describe el flujo técnico actualizado del proyecto Linker: instalación local, comandos de desarrollo y opciones de despliegue.
+
+\textbf{Repositorio:} \url{https://github.com/co-eiv-devsecops/linker3} \\
+\textbf{Producción:} \url{https://3.n-la-c.app}
+
+\section{2. Requisitos}
+
+\begin{itemize}
+  \item Node.js 22 o superior
+  \item npm
+  \item (Opcional) Terraform y Docker para despliegue local de paridad
+\end{itemize}
+
+\section{3. Instalación y ejecución local}
+
+Clonar e instalar:
 
 \begin{lstlisting}
 git clone https://github.com/co-eiv-devsecops/linker3.git
-\end{lstlisting}
-
-% ── 2. Ejecutar localmente ────────────────────────────────────────────────────
-\section{2. Ejecutar localmente}
-
-Requiere \textbf{Node.js 22 o superior}. No hay dependencias externas que instalar.
-
-\begin{lstlisting}
-node server.js
+cd linker3
+npm ci
+cp .env.example .env
+npm start
 \end{lstlisting}
 
 Abrir en el navegador: \texttt{http://localhost:3000}
 
-% ── 3. Despliegue en Oracle Cloud ────────────────────────────────────────────
-\section{3. Despliegue en Oracle Cloud (Ubuntu)}
+\section{4. Comandos de desarrollo}
 
-\textbf{URL de produccion:} \url{https://3.n-la-c.app} \\
-\textbf{IP del servidor:} \texttt{10.0.69.233} \\
-\textbf{Llave SSH:} \texttt{.ssh/linkervm-3.key}
-
-\subsection{3.1 Conectarse a la máquina virtual}
+Todos los comandos se ejecutan desde la raíz del repositorio:
 
 \begin{lstlisting}
-ssh -i .ssh/linkervm-3.key ubuntu@10.0.69.233
+npm start
+npm test
+npm run test:coverage
+npm run test:coverage:check
+npm run typecheck
+npm run lint
+npm run format
+npm run check
 \end{lstlisting}
 
-\subsection{3.2 Instalar Node.js (solo la primera vez)}
+\section{5. Arquitectura y estructura actual}
+
+El proyecto implementa arquitectura por capas:
+
+\begin{itemize}
+  \item Domain: entidades y contratos de negocio.
+  \item Application: casos de uso y validaciones.
+  \item Infrastructure: adaptadores técnicos (SQLite, logger, generador).
+  \item Presentation: endpoints HTTP y enrutamiento.
+  \item Composition root: ensamblado en \texttt{src/container.ts}.
+\end{itemize}
+
+Estructura de referencia:
 
 \begin{lstlisting}
-sudo apt-get update
-sudo apt-get install -y nodejs npm
+linker3/
+|-- src/
+|   |-- domain/
+|   |-- application/
+|   |-- infrastructure/
+|   |-- presentation/
+|   |-- composition/
+|   |-- config.ts
+|   |-- container.ts
+|   +-- main.ts
+|-- test/
+|-- public/
+|-- scripts/
+|-- docs/
+|-- infra/
+|-- cloud-init.yaml
+|-- .env.example
++-- package.json
 \end{lstlisting}
 
-Verificar versión:
+\section{6. Variables de entorno}
 
-\begin{lstlisting}
-node --version
-\end{lstlisting}
+\begin{itemize}
+  \item \texttt{PORT} (default: \texttt{3000})
+  \item \texttt{BASE\_URL} (default: \texttt{http://localhost:\{PORT\}})
+  \item \texttt{DB\_PATH} (default: \texttt{linker.db})
+\end{itemize}
 
-\subsection{3.3 Copiar archivos desde la máquina local}
+\section{7. Despliegue}
 
-Ejecutar desde tu computador (no desde la VM):
+\subsection{7.1 Opción A: VM con cloud-init}
 
-\begin{lstlisting}
-scp -i .ssh/linkervm-3.key -r ~/ruta/Tarea1/ ubuntu@10.0.69.233:~/dummy/
-\end{lstlisting}
+Usar \texttt{cloud-init.yaml} como script de inicialización de una VM Ubuntu 22.04+.
+La provisión instala Node.js 22, clona el repositorio en \texttt{/opt/linker},
+configura \texttt{systemd} y Nginx.
 
-\subsection{3.4 Configurar el servicio systemd}
-
-Dentro de la VM, crear el archivo de servicio:
-
-\begin{lstlisting}
-sudo nano /etc/systemd/system/linker.service
-\end{lstlisting}
-
-Pegar el siguiente contenido:
-
-\begin{lstlisting}
-[Unit]
-Description=Linker Node.js
-After=network.target
-
-[Service]
-Type=simple
-User=ubuntu
-WorkingDirectory=/home/ubuntu/dummy
-Environment=PORT=8080
-ExecStart=/usr/bin/node /home/ubuntu/dummy/server.js
-Restart=always
-RestartSec=10
-KillSignal=SIGINT
-SyslogIdentifier=linker
-
-[Install]
-WantedBy=multi-user.target
-\end{lstlisting}
-
-Activar e iniciar:
-
-\begin{lstlisting}
-sudo systemctl daemon-reload
-sudo systemctl enable linker
-sudo systemctl start linker
-\end{lstlisting}
-
-\subsection{3.5 Verificar que está corriendo}
+Verificar servicios:
 
 \begin{lstlisting}
 sudo systemctl status linker
+sudo systemctl status nginx
 \end{lstlisting}
 
-% ── 4. Actualizar la aplicación ───────────────────────────────────────────────
-\section{4. Actualizar la aplicación}
-
-\textbf{Paso 1.} Copiar los archivos modificados desde tu computador:
+TLS manual (una vez el dominio resuelva a la VM):
 
 \begin{lstlisting}
-scp -i .ssh/linkervm-3.key server.js ubuntu@10.0.69.233:~/dummy/server.js
-scp -i .ssh/linkervm-3.key public/index.html ubuntu@10.0.69.233:~/dummy/public/index.html
+sudo certbot --nginx -d <su-dominio>
 \end{lstlisting}
 
-\textbf{Paso 2.} Reiniciar el servicio en la VM:
+\subsection{7.2 Opción B: Terraform en Oracle Cloud}
 
 \begin{lstlisting}
-sudo systemctl restart linker
+cd infra/terraform-oracle
+cp terraform.tfvars.example terraform.tfvars
+terraform init
+terraform apply
 \end{lstlisting}
 
-\textbf{Paso 3.} Verificar logs si algo falla:
+\subsection{7.3 Opción C: Paridad local con Terraform + Docker}
 
 \begin{lstlisting}
-journalctl -u linker -f
+cd infra/terraform
+terraform init
+terraform apply
 \end{lstlisting}
 
-% ── 5. Estructura de archivos en la VM ───────────────────────────────────────
-\section{5. Estructura de archivos en la VM}
+\section{8. Actualización de despliegue en VM ya provisionada}
+
+Para actualizar una instancia ya provisionada:
 
 \begin{lstlisting}
-ubuntu@linker3:~/dummy/
-|-- server.js
-|-- package.json
-|-- linker.db
-+-- public/
-    +-- index.html
+bash infra/scripts/deploy.sh
 \end{lstlisting}
 
-% ── 6. Script de despliegue (Bono) ───────────────────────────────────────────
-\section{6. Script de despliegue automatico}
+El script ejecuta \texttt{git pull} en \texttt{/opt/linker}, reinicia \texttt{linker}
+y muestra estado del servicio.
 
-El archivo \texttt{deploy.sh} copia los archivos al servidor y reinicia el servicio en un solo comando.
+\section{9. CI/CD}
 
-\subsection{Requisitos previos}
+Workflows principales:
 
-Tener la llave SSH en \texttt{.ssh/linkervm-3.key} en tu computador local.
+\begin{itemize}
+  \item \texttt{.github/workflows/ci.yml}: validación general.
+  \item \texttt{.github/workflows/ci-cd-dev.yml}: pipeline para rama \texttt{develop}.
+  \item \texttt{.github/workflows/ci-cd-prod.yml}: pipeline para \texttt{main} y tags de release.
+\end{itemize}
 
-\subsection{Invocar el script}
-
-Desde la raiz del proyecto en tu computador local:
-
-\begin{lstlisting}
-bash deploy.sh
-\end{lstlisting}
-
-El script realiza automaticamente:
-
-\begin{enumerate}
-  \item Copia \texttt{server.js}, \texttt{public/index.html} y \texttt{package.json} a \texttt{/home/ubuntu/dummy/} via SCP.
-  \item Reinicia el servicio \texttt{linker} con \texttt{systemctl restart}.
-\end{enumerate}
-
-No es necesario conectarse manualmente a la VM para una actualizacion normal.
+Los pull requests deben pasar CI antes de mergearse según branch protection del repositorio.
 
 \end{document}
