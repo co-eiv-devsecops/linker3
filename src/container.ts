@@ -10,11 +10,27 @@ import { SqliteLinkRepository } from "./infrastructure/SqliteLinkRepository.ts";
 import { LinkController } from "./presentation/LinkController.ts";
 import { Router } from "./presentation/Router.ts";
 
+/**
+ * The fully wired application: the running HTTP server plus a handle to
+ * the repository (exposed so callers, e.g. tests, can close it cleanly).
+ */
 export interface App {
+  /** The underlying `http.Server`, not yet listening on any port. */
   server: Server;
+  /** The SQLite-backed repository instance used by the app. */
   repository: SqliteLinkRepository;
 }
 
+/**
+ * Composition root: instantiates and wires every layer (repository, code
+ * generator, validator, service, controller, router) into a single
+ * `http.Server`.
+ *
+ * @param config - Resolved application configuration (port, base URL, DB path).
+ * @param homePage - Optional HTML to serve at `/`; defaults to reading
+ * `public/index.html` from disk. Useful for injecting a stub in tests.
+ * @returns The wired {@link App}, ready to `listen()`.
+ */
 export function createApp(config: AppConfig, homePage?: string): App {
   const ui =
     homePage ??
