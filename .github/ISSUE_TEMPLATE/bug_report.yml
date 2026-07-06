@@ -24,8 +24,8 @@ body:
       label: Pasos para reproducir
       description: Pasos mínimos y concretos. Si aplica, incluye el `curl` exacto.
       placeholder: |
-        1. Arrancar con `node server.js`
-        2. `curl -X POST localhost:3000/api/shorten -d '{"url":"https://example.com","alias":"mi-alias"}'`
+        1. Arrancar con `npm start`
+        2. `curl -X POST localhost:3000/api/shorten -H "Content-Type: application/json" -d '{"url":"https://example.com","alias":"mi-alias"}'`
         3. Observar la respuesta
     validations:
       required: true
@@ -50,7 +50,7 @@ body:
     attributes:
       label: Entorno donde ocurre
       options:
-        - Local (node server.js)
+        - Local (npm start)
         - Producción (https://3.n-la-c.app)
         - Contenedor local (infra/terraform + docker)
         - Otro (detallar en la descripción)
