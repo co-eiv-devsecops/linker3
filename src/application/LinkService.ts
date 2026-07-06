@@ -2,6 +2,7 @@ import type { CodeGenerator } from "../domain/CodeGenerator.ts";
 import { ConflictError, NotFoundError } from "../domain/errors.ts";
 import type { Link } from "../domain/Link.ts";
 import type { LinkRepository } from "../domain/LinkRepository.ts";
+import { logger as defaultLogger, type Logger } from "../infrastructure/Logger.ts";
 import type { ShortenRequest, ShortenResult } from "./dto.ts";
 import { LinkValidator } from "./LinkValidator.ts";
 
@@ -18,20 +19,24 @@ export class LinkService {
   private readonly repository: LinkRepository;
   private readonly codeGenerator: CodeGenerator;
   private readonly validator: LinkValidator;
+  private readonly logger: Logger;
 
   /**
    * @param repository - Storage backend for links.
    * @param codeGenerator - Strategy used to generate short codes when no alias is provided.
    * @param validator - Input validator; defaults to a new {@link LinkValidator} instance.
+   * @param logger - Logger used to record business events; defaults to the shared console logger.
    */
   constructor(
     repository: LinkRepository,
     codeGenerator: CodeGenerator,
-    validator: LinkValidator = new LinkValidator()
+    validator: LinkValidator = new LinkValidator(),
+    logger: Logger = defaultLogger
   ) {
     this.repository = repository;
     this.codeGenerator = codeGenerator;
     this.validator = validator;
+    this.logger = logger;
   }
 
   /**
@@ -58,6 +63,7 @@ export class LinkService {
     }
 
     this.repository.save(code, request.url);
+    this.logger.info("Enlace creado", { code, url: request.url, alias: useAlias });
     return { code };
   }
 
@@ -74,6 +80,7 @@ export class LinkService {
       throw new NotFoundError("No encontrado");
     }
     this.repository.incrementVisits(code);
+    this.logger.info("Redirección resuelta", { code, url: link.url });
     return link.url;
   }
 
