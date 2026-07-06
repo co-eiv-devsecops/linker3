@@ -3,7 +3,7 @@ name: CI/CD - Prod
 on:
   push:
     branches: [main]
-    tags: ["v*"]
+    tags: ["v*.*.*"]
   workflow_dispatch:
 
 concurrency:
@@ -261,25 +261,36 @@ jobs:
           echo "O re-ejecutar el pipeline sobre el commit anterior desde Actions."
 
   notify:
-    name: Notificar resultado
+    name: Notificar y crear release
     runs-on: ubuntu-latest
-    needs: [deploy-prod, api-tests, rollback]
-    if: always()
+    needs: [deploy-prod]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.deploy-prod.result == 'success'
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-        if: needs.deploy-prod.result == 'success' && startsWith(github.ref, 'refs/tags/v')
+        with:
+          fetch-depth: 0
+
+      - name: Validar que el tag apunta a main
+        run: |
+          git fetch origin main --depth=1
+          TAG_COMMIT="$(git rev-list -n 1 "$GITHUB_REF")"
+          if git merge-base --is-ancestor "$TAG_COMMIT" origin/main; then
+            echo "El tag pertenece a main"
+          else
+            echo "::error::El tag no apunta a un commit contenido en main"
+            exit 1
+          fi
 
       - name: Crear GitHub Release
-        if: needs.deploy-prod.result == 'success' && startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+          make_latest: true
 
       - name: Notificar al equipo
         run: |
           echo "Pipeline prod finalizado"
           echo "Deploy: ${{ needs.deploy-prod.result }}"
-          echo "API Tests: ${{ needs.api-tests.result }}"
-          echo "Rollback: ${{ needs.rollback.result }}"
+          echo "Release creado para: ${{ github.ref_name }}"
