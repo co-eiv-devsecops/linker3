@@ -18,13 +18,13 @@ Closes #<!-- número de issue, si aplica -->
 ## ¿Cómo se probó?
 
 <!-- Comandos ejecutados y resultado. Ejemplos:
-- npm test / npm run test:ts → todo verde
-- Prueba manual: node server.js + curl a /api/shorten
+- npm test → todo verde
+- Prueba manual: npm start + curl a /api/shorten
 -->
 
 ## Checklist
 
-- [ ] Los tests pasan localmente (`npm test` y `npm run test:ts`)
+- [ ] Los tests pasan localmente (`npm test`)
 - [ ] Agregué tests que cubren el cambio (o no aplica)
 - [ ] El typecheck pasa (`npm run typecheck`) si toqué código TypeScript
 - [ ] Actualicé la documentación afectada (README, CLAUDE.md, comentarios)
