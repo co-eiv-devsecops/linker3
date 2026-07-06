@@ -47,6 +47,18 @@ test("GET / responde la página principal como HTML", async (t) => {
   assert.equal(res.body, "<h1>hola</h1>");
 });
 
+test("GET /health responde 200 con estado ok y uptime", async (t) => {
+  const { router } = makeRouter(t);
+  const res = new FakeResponse();
+
+  await router.handle(asReq("GET", "/health"), asRes(res));
+
+  assert.equal(res.status, 200);
+  const body = JSON.parse(res.body);
+  assert.equal(body.status, "ok");
+  assert.equal(typeof body.uptime, "number");
+});
+
 test("GET /api/links delega en controller.list", async (t) => {
   const { repo, router } = makeRouter(t);
   repo.save("abc", "https://www.wikipedia.org");

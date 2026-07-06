@@ -31,6 +31,10 @@ export class Router {
       return sendHtml(res, 200, this.homePage);
     }
 
+    if (url === "/health" && method === "GET") {
+      return sendJson(res, 200, { status: "ok", uptime: process.uptime() });
+    }
+
     if (url === "/api/links" && method === "GET") {
       return this.controller.list(req, res);
     }
