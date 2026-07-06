@@ -85,7 +85,8 @@ jobs:
         run: echo "Pendiente implementar CodeQL"
 
       - name: Validar cumplimiento (gate bloqueante)
-        run: echo "Pendiente: en prod cualquier hallazgo crítico detiene el pipeline"
+        run: |
+          echo 'Pendiente: en prod cualquier hallazgo critico detiene el pipeline'
 
   build:
     name: Build y empaquetado
