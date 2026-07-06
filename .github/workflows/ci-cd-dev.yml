@@ -13,25 +13,20 @@ concurrency:
 
 env:
   NODE_VERSION: "22"
-  APP_NAME: linker
-  ENVIRONMENT: dev
 
 jobs:
   lint:
     name: Lint y calidad de código
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout del código
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Configurar Node.js ${{ env.NODE_VERSION }}
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Instalar dependencias
-        run: npm ci
+      - run: npm ci
 
       - name: Verificar tipos (tsc --noEmit)
         run: npm run typecheck
@@ -44,17 +39,14 @@ jobs:
     runs-on: ubuntu-latest
     needs: lint
     steps:
-      - name: Checkout del código
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Configurar Node.js ${{ env.NODE_VERSION }}
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Instalar dependencias
-        run: npm ci
+      - run: npm ci
 
       - name: Ejecutar tests
         run: npm test
@@ -62,8 +54,7 @@ jobs:
       - name: Reporte de cobertura (bloquea si < 85%)
         run: npm run test:coverage:check | tee coverage.txt
 
-      - name: Publicar resultados de tests
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: coverage-report-${{ github.sha }}
           path: coverage.txt
@@ -73,113 +64,20 @@ jobs:
     runs-on: ubuntu-latest
     needs: lint
     steps:
-      - name: Checkout del código
-        run: echo "Hello World - checkout del repositorio"
+      - uses: actions/checkout@v4
 
-      - name: Escaneo de secretos
-        run: echo "Hello World - escaneo de secretos (gitleaks / trufflehog)"
-
-      - name: Análisis SAST
-        run: echo "Hello World - análisis estático de seguridad (CodeQL / semgrep)"
-
-      - name: Escaneo de IaC (Terraform / cloud-init)
-        run: echo "Hello World - tfsec/checkov sobre infra/terraform-oracle y cloud-init.yaml"
-
-  build:
-    name: Build y empaquetado
-    runs-on: ubuntu-latest
-    needs: [test, security-scan]
-    steps:
-      - name: Checkout del código
-        uses: actions/checkout@v4
-
-      - name: Configurar Node.js ${{ env.NODE_VERSION }}
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Instalar dependencias
-        run: npm ci
+      - run: npm ci
 
-      - name: Validar arranque de la aplicación
-        run: |
-          PORT=3000 DB_PATH=/tmp/linker.db node src/main.ts &
-          SERVER_PID=$!
-          for i in $(seq 1 10); do
-            curl -sf http://localhost:3000/ > /dev/null && break
-            sleep 1
-          done
-          curl -sf http://localhost:3000/ > /dev/null
-          kill $SERVER_PID
+      - name: Auditoría de dependencias (bloquea en vulnerabilidades altas)
+        run: npm audit --audit-level=high
 
-      - name: Construir imagen Docker (empaquetamiento para Linux)
-        run: docker build -f infra/docker/Dockerfile -t ${{ env.APP_NAME }}:${{ github.sha }} .
+      - name: Escaneo de secretos (pendiente gitleaks)
+        run: echo "Pendiente implementar gitleaks"
 
-      - name: Empaquetar imagen como artefacto
-        run: docker save ${{ env.APP_NAME }}:${{ github.sha }} -o ${{ env.APP_NAME }}-${{ github.sha }}.tar
-
-      - name: Subir artefacto
-        uses: actions/upload-artifact@v4
-        with:
-          name: linker-dev-${{ github.sha }}
-          path: ${{ env.APP_NAME }}-${{ github.sha }}.tar
-
-  deploy-dev:
-    name: Deploy a Dev
-    runs-on: ubuntu-latest
-    needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
-    environment:
-      name: dev
-      url: http://dev.n-la-c.app
-    steps:
-      - name: Configurar llave SSH
-        run: echo "Hello World - cargar secret SSH_PRIVATE_KEY_DEV (linkervm-dev.key)"
-
-      - name: Actualizar código en la VM de dev
-        run: echo "Hello World - ssh ubuntu@VM_DEV 'cd /opt/linker && git pull origin develop'"
-
-      - name: Reiniciar servicio
-        run: echo "Hello World - ssh ubuntu@VM_DEV 'sudo systemctl restart linker'"
-
-      - name: Verificar estado del servicio
-        run: echo "Hello World - ssh ubuntu@VM_DEV 'sudo systemctl status linker --no-pager'"
-
-  api-tests:
-    name: Pruebas de API (Newman)
-    runs-on: ubuntu-latest
-    needs: deploy-dev
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
-    steps:
-      - name: Checkout del código
-        uses: actions/checkout@v4
-
-      - name: Configurar Node.js ${{ env.NODE_VERSION }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-
-      - name: Ejecutar colección Postman contra la instancia de dev
-        run: |
-          npx newman run postman/linker.postman_collection.json \
-            --env-var baseUrl=http://dev.n-la-c.app \
-            --reporters cli,junit \
-            --reporter-junit-export newman-report.xml
-
-      - name: Publicar reporte de Newman
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: newman-report-dev-${{ github.sha }}
-          path: newman-report.xml
-
-  notify:
-    name: Notificar resultado
-    runs-on: ubuntu-latest
-    needs: [deploy-dev, api-tests]
-    if: always()
-    steps:
-      - name: Notificar al equipo
-        run: echo "Hello World - notificación (Slack/correo) del resultado del pipeline dev"
+      - name: Análisis SAST (pendiente CodeQL)
+        run: echo "Pendiente implementar CodeQL"

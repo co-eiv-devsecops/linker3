@@ -2,6 +2,7 @@ node_modules/
 linker.db
 *.db-journal
 .env
+coverage.txt
 
 # Terraform (infra/terraform*) — .terraform.lock.hcl SÍ se versiona (pin de providers)
 .terraform/
