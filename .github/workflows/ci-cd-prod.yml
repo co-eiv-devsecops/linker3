@@ -155,7 +155,7 @@ jobs:
       OCI_CLI_KEY_CONTENT: ${{ secrets.OCI_CLI_KEY_CONTENT }}
       OCI_CLI_REGION: ${{ vars.OCI_CLI_REGION }}
     steps:
-      - uses: co-eiv-devsecops/material-curso/actions/oci-bastion-deploy@v1
+      - uses: co-eiv-devsecops/material-curso/actions/oci-bastion-deploy@main
         with:
           instance-id: ${{ vars.OCI_INSTANCE_OCID }}
           artifact-name: linker-src-prod-${{ github.sha }}
