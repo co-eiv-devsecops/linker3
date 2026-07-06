@@ -2,6 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { ConflictError } from "../domain/errors.ts";
 import type { Link } from "../domain/Link.ts";
 import type { LinkRepository } from "../domain/LinkRepository.ts";
+import { logger as defaultLogger, type Logger } from "./Logger.ts";
 
 /**
  * {@link LinkRepository} implementation backed by an embedded SQLite
@@ -12,20 +13,24 @@ import type { LinkRepository } from "../domain/LinkRepository.ts";
  */
 export class SqliteLinkRepository implements LinkRepository {
   private readonly db: DatabaseSync;
+  private readonly logger: Logger;
 
   /**
    * Opens (or creates) the SQLite database at `dbPath` and ensures the
    * `links` table exists.
    *
    * @param dbPath - Filesystem path to the SQLite database file.
+   * @param logger - Logger used to record data-access events; defaults to the shared console logger.
    */
-  constructor(dbPath: string) {
+  constructor(dbPath: string, logger: Logger = defaultLogger) {
     this.db = new DatabaseSync(dbPath);
     this.db.exec(`CREATE TABLE IF NOT EXISTS links (
       code    TEXT PRIMARY KEY,
       url     TEXT NOT NULL,
       visits  INTEGER DEFAULT 0
     )`);
+    this.logger = logger;
+    this.logger.info("Base de datos SQLite abierta", { dbPath });
   }
 
   /**
@@ -49,6 +54,7 @@ export class SqliteLinkRepository implements LinkRepository {
       this.db.prepare("INSERT INTO links (code, url) VALUES (?, ?)").run(code, url);
     } catch (e) {
       if (e instanceof Error && e.message.includes("UNIQUE constraint")) {
+        this.logger.warn("Conflicto de código al guardar enlace", { code });
         throw new ConflictError("Código ya existe");
       }
       throw e;
@@ -87,5 +93,6 @@ export class SqliteLinkRepository implements LinkRepository {
    */
   close(): void {
     this.db.close();
+    this.logger.info("Conexión a la base de datos cerrada");
   }
 }
