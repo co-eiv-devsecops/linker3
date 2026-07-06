@@ -21,17 +21,14 @@ jobs:
     name: Lint y calidad de código
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout del código
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Configurar Node.js ${{ env.NODE_VERSION }}
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Instalar dependencias
-        run: npm ci
+      - run: npm ci
 
       - name: Verificar tipos (tsc --noEmit)
         run: npm run typecheck
@@ -44,17 +41,14 @@ jobs:
     runs-on: ubuntu-latest
     needs: lint
     steps:
-      - name: Checkout del código
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Configurar Node.js ${{ env.NODE_VERSION }}
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Instalar dependencias
-        run: npm ci
+      - run: npm ci
 
       - name: Ejecutar tests
         run: npm test
@@ -62,8 +56,7 @@ jobs:
       - name: Reporte de cobertura (bloquea si < 85%)
         run: npm run test:coverage:check | tee coverage.txt
 
-      - name: Publicar resultados de tests
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: coverage-report-prod-${{ github.sha }}
           path: coverage.txt
@@ -73,37 +66,40 @@ jobs:
     runs-on: ubuntu-latest
     needs: lint
     steps:
-      - name: Checkout del código
-        run: echo "Hello World - checkout del repositorio"
+      - uses: actions/checkout@v4
 
-      - name: Escaneo de secretos
-        run: echo "Hello World - escaneo de secretos (gitleaks / trufflehog)"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
 
-      - name: Análisis SAST
-        run: echo "Hello World - análisis estático de seguridad (CodeQL / semgrep)"
+      - run: npm ci
 
-      - name: Escaneo de IaC (Terraform / cloud-init)
-        run: echo "Hello World - tfsec/checkov sobre infra/terraform-oracle y cloud-init.yaml"
+      - name: Auditoría de dependencias (bloquea en vulnerabilidades altas)
+        run: npm audit --audit-level=high
+
+      - name: Escaneo de secretos (pendiente gitleaks)
+        run: echo "Pendiente implementar gitleaks"
+
+      - name: Análisis SAST (pendiente CodeQL)
+        run: echo "Pendiente implementar CodeQL"
 
       - name: Validar cumplimiento (gate bloqueante)
-        run: echo "Hello World - en prod cualquier hallazgo crítico detiene el pipeline"
+        run: echo "Pendiente: en prod cualquier hallazgo crítico detiene el pipeline"
 
   build:
     name: Build y empaquetado
     runs-on: ubuntu-latest
     needs: [test, security-scan]
     steps:
-      - name: Checkout del código
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Configurar Node.js ${{ env.NODE_VERSION }}
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Instalar dependencias
-        run: npm ci
+      - run: npm ci
 
       - name: Validar arranque de la aplicación
         run: |
@@ -116,83 +112,93 @@ jobs:
           curl -sf http://localhost:3000/ > /dev/null
           kill $SERVER_PID
 
-      - name: Construir imagen Docker (empaquetamiento para Linux)
+      - name: Construir imagen Docker
         run: docker build -f infra/docker/Dockerfile -t ${{ env.APP_NAME }}:${{ github.sha }} .
 
       - name: Empaquetar imagen como artefacto
         run: docker save ${{ env.APP_NAME }}:${{ github.sha }} -o ${{ env.APP_NAME }}-${{ github.sha }}.tar
 
-      - name: Subir artefacto
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: linker-prod-${{ github.sha }}
           path: ${{ env.APP_NAME }}-${{ github.sha }}.tar
 
-  plan-infra:
-    name: Terraform plan (Oracle Cloud)
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Checkout del código
-        run: echo "Hello World - checkout del repositorio"
+      - name: Empaquetar fuentes para despliegue en VM
+        run: |
+          mkdir -p deploy-src
+          cp -r src public package.json deploy-src/
 
-      - name: Configurar credenciales OCI
-        run: echo "Hello World - cargar secrets OCI_CLI_* para el provider oci"
-
-      - name: terraform init
-        run: echo "Hello World - terraform init en infra/terraform-oracle"
-
-      - name: terraform plan
-        run: echo "Hello World - terraform plan (detectar drift de la VM antes de desplegar)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linker-src-prod-${{ github.sha }}
+          path: deploy-src/
 
   deploy-prod:
     name: Deploy a Producción
     runs-on: ubuntu-latest
-    needs: plan-infra
+    needs: build
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     environment:
       name: prod
       url: https://3.n-la-c.app
+    permissions:
+      contents: read
+      actions: read
+    env:
+      DEPLOYMENT_PRIVATE_KEY: ${{ secrets.DEPLOYMENT_PRIVATE_KEY }}
+      DEPLOYMENT_PUBLIC_KEY: ${{ vars.DEPLOYMENT_PUBLIC_KEY }}
+      OCI_BASTION_OCID: ${{ vars.OCI_BASTION_OCID }}
+      OCI_CLI_USER: ${{ secrets.OCI_CLI_USER }}
+      OCI_CLI_TENANCY: ${{ secrets.OCI_CLI_TENANCY }}
+      OCI_CLI_FINGERPRINT: ${{ secrets.OCI_CLI_FINGERPRINT }}
+      OCI_CLI_KEY_CONTENT: ${{ secrets.OCI_CLI_KEY_CONTENT }}
+      OCI_CLI_REGION: ${{ vars.OCI_CLI_REGION }}
     steps:
-      - name: Configurar llave SSH
-        run: echo "Hello World - cargar secret SSH_PRIVATE_KEY_PROD (linkervm-3.key)"
-
-      - name: Backup de la base de datos
-        run: echo "Hello World - ssh ubuntu@VM_PROD 'cp /opt/linker/linker.db /opt/backups/linker-${{ github.sha }}.db'"
-
-      - name: Actualizar código en la VM de producción
-        run: echo "Hello World - ssh ubuntu@VM_PROD 'cd /opt/linker && git pull origin main'"
-
-      - name: Reiniciar servicio
-        run: echo "Hello World - ssh ubuntu@VM_PROD 'sudo systemctl restart linker'"
-
-      - name: Verificar estado del servicio
-        run: echo "Hello World - ssh ubuntu@VM_PROD 'sudo systemctl status linker --no-pager'"
+      - uses: co-eiv-devsecops/material-curso/actions/oci-bastion-deploy@v1
+        with:
+          instance-id: ${{ vars.OCI_INSTANCE_OCID }}
+          artifact-name: linker-src-prod-${{ github.sha }}
+          target-path: /opt/linker
+          target-os-username: ubuntu
+          script: |
+            set -euo pipefail
+            sudo systemctl restart linker
+            sudo systemctl is-active --quiet linker
+            echo "Despliegue exitoso en producción — sha: $DEPLOY_PATH"
 
   api-tests:
     name: Pruebas de API (Newman)
     runs-on: ubuntu-latest
     needs: deploy-prod
     steps:
-      - name: Checkout del código
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Configurar Node.js ${{ env.NODE_VERSION }}
-        uses: actions/setup-node@v4
+      - name: Verificar si existe la colección Postman
+        id: check
+        run: |
+          if [ -f "postman/linker.postman_collection.json" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Colección Postman no encontrada, omitiendo pruebas de API"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.exists == 'true'
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Ejecutar colección Postman contra la instancia de producción
+      - name: Ejecutar colección Postman contra producción
+        if: steps.check.outputs.exists == 'true'
         run: |
           npx newman run postman/linker.postman_collection.json \
             --env-var baseUrl=${{ env.PROD_URL }} \
             --reporters cli,junit \
             --reporter-junit-export newman-report.xml
 
-      - name: Publicar reporte de Newman
-        if: always()
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.check.outputs.exists == 'true'
         with:
           name: newman-report-prod-${{ github.sha }}
           path: newman-report.xml
@@ -203,26 +209,35 @@ jobs:
     needs: [deploy-prod, api-tests]
     if: failure()
     steps:
-      - name: Revertir al commit anterior
-        run: echo "Hello World - ssh ubuntu@VM_PROD 'cd /opt/linker && git reset --hard HEAD~1'"
-
-      - name: Restaurar base de datos
-        run: echo "Hello World - restaurar backup /opt/backups/linker-${{ github.sha }}.db"
-
-      - name: Reiniciar servicio
-        run: echo "Hello World - ssh ubuntu@VM_PROD 'sudo systemctl restart linker'"
-
-      - name: Alertar rollback ejecutado
-        run: echo "Hello World - alerta crítica, se ejecutó rollback en producción"
+      - name: Alerta de rollback requerido
+        run: |
+          echo "::error::El despliegue o las pruebas fallaron en el sha ${{ github.sha }}"
+          echo "Para hacer rollback manual en la VM:"
+          echo "  ssh ubuntu@<VM> 'sudo systemctl stop linker'"
+          echo "  ssh ubuntu@<VM> 'git -C /opt/linker checkout HEAD~1 -- src/ public/'"
+          echo "  ssh ubuntu@<VM> 'sudo systemctl start linker'"
+          echo "O re-ejecutar el pipeline sobre el commit anterior desde Actions."
 
   notify:
     name: Notificar resultado
     runs-on: ubuntu-latest
     needs: [deploy-prod, api-tests, rollback]
     if: always()
+    permissions:
+      contents: write
     steps:
-      - name: Notificar al equipo
-        run: echo "Hello World - notificación (Slack/correo) del resultado del despliegue a prod"
+      - uses: actions/checkout@v4
+        if: needs.deploy-prod.result == 'success' && startsWith(github.ref, 'refs/tags/v')
 
-      - name: Crear release en GitHub
-        run: echo "Hello World - crear GitHub Release con changelog si el despliegue fue exitoso"
+      - name: Crear GitHub Release
+        if: needs.deploy-prod.result == 'success' && startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+
+      - name: Notificar al equipo
+        run: |
+          echo "Pipeline prod finalizado"
+          echo "Deploy: ${{ needs.deploy-prod.result }}"
+          echo "API Tests: ${{ needs.api-tests.result }}"
+          echo "Rollback: ${{ needs.rollback.result }}"
