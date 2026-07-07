@@ -33,7 +33,7 @@ body:
       label: Área afectada
       multiple: true
       options:
-        - API (server.js / src)
+        - API (src/)
         - Frontend (public/index.html)
         - Base de datos / esquema
         - Infraestructura / despliegue (infra/, cloud-init, deploy.sh)

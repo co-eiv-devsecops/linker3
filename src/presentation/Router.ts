@@ -1,34 +1,108 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import type { LDClient } from "@launchdarkly/node-server-sdk";
 import { AppError } from "../domain/errors.ts";
+import { logger as defaultLogger, type Logger } from "../infrastructure/Logger.ts";
 import { sendHtml, sendJson } from "./http.ts";
 import type { LinkController } from "./LinkController.ts";
 
+/**
+ * Top-level HTTP request dispatcher.
+ *
+ * Routes incoming requests to the home page, health check, or
+ * {@link LinkController} handlers, and centralizes error handling by
+ * converting thrown {@link AppError}s (and unexpected errors) into JSON
+ * error responses. Every request is logged on completion.
+ */
 export class Router {
   private readonly controller: LinkController;
   private readonly homePage: string;
+  private readonly logger: Logger;
+  private readonly ldClient: LDClient;
 
-  constructor(controller: LinkController, homePage: string) {
+  /**
+   * @param controller - Controller handling link-related routes.
+   * @param homePage - HTML markup served for `/` and `/index.html`.
+   * @param ldClient - Initialized LaunchDarkly client, used by the demo route.
+   * @param logger - Logger used to record each request; defaults to the
+   * shared console logger.
+   */
+  constructor(
+    controller: LinkController,
+    homePage: string,
+    ldClient: LDClient,
+    logger: Logger = defaultLogger
+  ) {
     this.controller = controller;
     this.homePage = homePage;
+    this.ldClient = ldClient;
+    this.logger = logger;
   }
 
+  /**
+   * Entry point invoked for every incoming HTTP request. Delegates to
+   * {@link dispatch} and translates any thrown error into a JSON
+   * response: `AppError` subclasses use their own `status`/`message`,
+   * anything else becomes a generic 500. Logs the outcome of every
+   * request, including a stack trace for unexpected errors.
+   *
+   * @param req - Incoming request.
+   * @param res - Response to write to.
+   */
   async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const start = Date.now();
+    const { method = "GET", url = "/" } = req;
+
     try {
       await this.dispatch(req, res);
+      this.logger.info(`${method} ${url}`, { ms: Date.now() - start });
     } catch (e) {
+      const ms = Date.now() - start;
       if (e instanceof AppError) {
         sendJson(res, e.status, { error: e.message });
+        this.logger.warn(`${method} ${url}`, { status: e.status, error: e.message, ms });
       } else {
         sendJson(res, 500, { error: "Error interno" });
+        const error = e instanceof Error ? (e.stack ?? e.message) : String(e);
+        this.logger.error(`${method} ${url}`, { status: 500, error, ms });
       }
     }
   }
 
+  /**
+   * Matches the request method/URL against the known routes and invokes
+   * the corresponding handler. Any path not matching a known route is
+   * treated as a short-code redirect lookup.
+   *
+   * @param req - Incoming request.
+   * @param res - Response to write to.
+   */
   private async dispatch(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const { method = "GET", url = "/" } = req;
 
     if (url === "/" || url === "/index.html") {
       return sendHtml(res, 200, this.homePage);
+    }
+
+    if (url === "/health" && method === "GET") {
+      this.logger.debug("Chequeo de salud solicitado", { uptime: process.uptime() });
+      return sendJson(res, 200, { status: "ok", uptime: process.uptime() });
+    }
+
+    // LaunchDarkly demo - safe to remove
+    if (url === "/launchdarkly-demo" && method === "GET") {
+      const context = { kind: "user", key: "demo-user" };
+      const enabled = await this.ldClient.boolVariation("my-first-flag", context, false);
+      // Deliver the evaluation event immediately instead of waiting for the
+      // periodic 5s flush, so a single request reliably registers in
+      // LaunchDarkly (e.g. onboarding "first event" detection).
+      await this.ldClient.flush();
+      return sendJson(res, 200, {
+        flag: "my-first-flag",
+        enabled,
+        message: enabled
+          ? "LaunchDarkly is working — the flag is ON"
+          : "LaunchDarkly is working — the flag is OFF",
+      });
     }
 
     if (url === "/api/links" && method === "GET") {

@@ -8,7 +8,7 @@ body:
     attributes:
       label: Contexto
       description: Qué situación actual motiva esta tarea y por qué merece hacerse.
-      placeholder: "El manejo de errores está duplicado entre server.js y src/links.js."
+      placeholder: "La cobertura de test:coverage:check está en 85% y el equipo quiere subirla a 90% antes de aceptar nuevas features."
     validations:
       required: true
 
@@ -18,8 +18,9 @@ body:
       label: Alcance de la tarea
       description: Qué entra y qué NO entra en esta tarea.
       placeholder: |
-        Incluye: extraer el manejo de errores a un módulo común.
-        No incluye: cambiar el contrato HTTP.
+        Incluye: agregar casos de prueba en test/ para las ramas sin cubrir
+        y subir el umbral de test:coverage:check en package.json.
+        No incluye: cambiar lógica de producción ni el contrato HTTP.
     validations:
       required: true
 
@@ -29,7 +30,7 @@ body:
       label: Criterios de aceptación
       description: Lista verificable de condiciones para dar la tarea por terminada.
       placeholder: |
-        - [ ] Los tests existentes siguen pasando
+        - [ ] npm run test:coverage:check pasa con el nuevo umbral
         - [ ] No cambia ninguna respuesta de la API
     validations:
       required: true

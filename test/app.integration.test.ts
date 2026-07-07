@@ -7,7 +7,13 @@ const HOME = "<html><body>linker</body></html>";
 
 async function startApp(t: { after(fn: () => Promise<void> | void): void }) {
   const app: App = createApp(
-    { port: 0, baseUrl: "https://short.test", dbPath: ":memory:" },
+    {
+      port: 0,
+      baseUrl: "https://short.test",
+      dbPath: ":memory:",
+      features: { newCodeGen: false },
+      logLevel: "error",
+    },
     HOME
   );
 

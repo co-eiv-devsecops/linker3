@@ -1,0 +1,22 @@
+# Revisores obligatorios por área.
+# Requiere "Require review from Code Owners" activo en la protección de
+# rama de `main` (Settings → Branches). Ver .github/CONTRIBUTING.md para
+# el flujo completo de PR y review.
+#
+# GitHub usa el ÚLTIMO patrón que matchea una ruta, así que las reglas más
+# específicas van después del catch-all.
+
+# Fallback: cualquier archivo no cubierto por una regla más específica.
+* @CARDAV-45 @diegcard @saleo5 @cntrIsaac
+
+# Código de aplicación (domain/application/infrastructure/presentation).
+/src/ @CARDAV-45 @diegcard @saleo5 @cntrIsaac
+
+# Suite de tests.
+/test/ @CARDAV-45 @diegcard @saleo5 @cntrIsaac
+
+# Pipelines de CI/CD.
+/.github/workflows/ @CARDAV-45 @diegcard @saleo5 @cntrIsaac
+
+# Infraestructura (Terraform, cloud-init, scripts de provisión/despliegue).
+/infra/ @CARDAV-45 @diegcard @saleo5 @cntrIsaac

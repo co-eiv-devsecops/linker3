@@ -8,6 +8,8 @@ test("createApp sin homePage explícito sirve public/index.html real", async (t)
     port: 0,
     baseUrl: "https://short.test",
     dbPath: ":memory:",
+    features: { newCodeGen: false },
+    logLevel: "error",
   });
 
   await new Promise<void>((resolve) => app.server.listen(0, resolve));

@@ -1,27 +1,117 @@
 # Guía de contribución
 
-Gracias por contribuir a **Linker**. Esta guía resume el flujo de trabajo y
-las convenciones del proyecto.
+Gracias por contribuir a **Linker**. Esta guía cubre el flujo completo desde
+clonar el repositorio hasta que tu cambio queda mergeado.
 
-## Requisitos
+## 1. Preparar el entorno
+
+```bash
+git clone https://github.com/co-eiv-devsecops/linker3.git
+cd linker3
+npm ci                      # instala husky y las devDependencies (biome, typescript)
+cp .env.example .env        # ajusta BASE_URL si es necesario
+npm start                   # http://localhost:3000
+```
+
+Requisitos:
 
 - **Node.js >= 22** (el proyecto usa `node:sqlite`, integrado desde v22).
 - Sin dependencias de producción: no agregues paquetes npm al runtime sin
   discutirlo antes en un issue.
 
-## Flujo de trabajo (branching)
+`npm ci` registra automáticamente los git hooks de Husky (ver
+[Git hooks](#5-git-hooks-husky) más abajo); no hace falta ningún paso extra.
+
+Alternativa reproducible sin instalar Node localmente: `.devcontainer/`
+(Dev Containers) — ver [README.md](../README.md#devcontainer).
+
+## 2. Flujo de trabajo (branching)
+
+El repositorio sigue un flujo trunk-based con `develop` como rama tronco:
 
 ```
 feature/mi-cambio  →  develop  →  main
 ```
 
 1. Crea tu rama a partir de `develop`: `feature/<descripcion>` (o
-   `fix/<descripcion>` para correcciones).
-2. Abre el PR contra `develop`. El CI (`ci-cd-dev.yml`) debe pasar.
-3. `main` solo recibe merges desde `develop` (release); despliega a
+   `fix/<descripcion>` para correcciones). Mantenla corta y enfocada en un
+   solo cambio — cuanto más viva una rama, más se aleja de `develop`.
+2. Trabaja en TDD (ver sección siguiente) y confirma en local que
+   `npm test`, `npm run typecheck` y `npm run lint` pasan antes de subir.
+3. Sube tu rama y abre el PR contra `develop` usando la plantilla
+   (se completa automáticamente). El CI (`ci-cd-dev.yml`) se dispara solo:
+   lint + typecheck → tests + cobertura → auditoría de dependencias.
+4. **El PR es obligatorio**: nadie mergea directo a `develop` ni a `main`.
+   Necesitas el CI en verde y al menos una aprobación de review antes de
+   mergear.
+5. `main` solo recibe merges desde `develop` (release); despliega a
    producción vía `ci-cd-prod.yml`.
 
-## Commits
+## 3. TDD (Test-Driven Development)
+
+Los cambios de comportamiento en `src/` se desarrollan con el ciclo
+**red → green → refactor**:
+
+1. **Red**: escribe primero el test en `test/` que exprese el comportamiento
+   esperado (unitario para `application`/`domain`, o vía
+   `app.integration.test.ts` si cruza capas). Ejecuta `npm test` y confirma
+   que falla por la razón correcta (no por un typo o import roto).
+2. **Green**: escribe el mínimo código en `src/` para que el test pase.
+   No adelantes casos que el test todavía no exige.
+3. **Refactor**: con el test en verde como red de seguridad, limpia el
+   diseño (nombres, duplicación) sin cambiar comportamiento. Vuelve a
+   correr `npm test` tras cada ajuste.
+
+Ejemplo del ciclo aplicado a una regla de validación nueva:
+
+```ts
+// 1. Red — test/LinkValidator.test.ts
+test("assertValidAlias rechaza alias con emoji", () => {
+  assert.throws(() => validator.assertValidAlias("abc😀"), ValidationError);
+});
+
+// 2. Green — src/application/LinkValidator.ts
+//    ajustar ALIAS_REGEX (o la lógica) hasta que el test pase.
+
+// 3. Refactor — con el test en verde, simplificar si hace falta.
+```
+
+Todo PR con cambios en `src/` debe llegar con tests que fallen sin el
+cambio y pasen con él. Un PR sin tests para comportamiento nuevo no se
+aprueba en review.
+
+## 4. Ejecutar tests y cobertura localmente
+
+```bash
+npm test                    # toda la suite (test/**/*.test.ts)
+npm run test:coverage       # suite + reporte de cobertura en consola
+npm run test:coverage:check # igual, pero falla si baja del umbral (ver package.json)
+npm run typecheck           # verificación de tipos (tsc --noEmit)
+npm run lint                 # biome lint .
+npm run format               # biome format --write . (autoformatea)
+npm run check                # biome check --write . (lint + format en un paso)
+```
+
+El CI ejecuta `test:coverage:check`, que usa los umbrales nativos del test
+runner de Node (`--test-coverage-lines/branches/functions`). El número
+vigente vive en el script `test:coverage:check` de `package.json` — es la
+única fuente de verdad; si lo subes, actualízalo ahí (no solo en
+comentarios o docs).
+
+## 5. Git hooks (Husky)
+
+Se ejecutan automáticamente, sin pasos manuales:
+
+- **pre-commit**: corre `biome check --write` sobre los `.ts`/`.json` en
+  stage (autoformatea y re-agrega) y luego `npm run typecheck`. Si falla,
+  el commit se aborta — corrige el error y vuelve a intentar.
+- **pre-push**: corre `npm test`. Si algún test falla, el push se
+  cancela.
+
+Esto significa que si `npm test` falla localmente, ni siquiera podrás
+hacer `git push` — no hay forma de saltarse esto por accidente.
+
+## 6. Commits
 
 Usamos [Conventional Commits](https://www.conventionalcommits.org/es/):
 
@@ -36,46 +126,27 @@ test(links): cubrir colisión de códigos generados
 Escribe el mensaje en imperativo y explica el *por qué* en el cuerpo si el
 cambio no es obvio.
 
-## Ejecutar y probar
-
-```bash
-node server.js          # versión estable (JS)
-npm run start:ts        # versión refactorizada (TypeScript)
-
-npm test                # todos los tests
-npm run test:js         # solo tests de la versión JS
-npm run test:ts         # solo tests de la versión TS
-npm run typecheck       # verificación de tipos (requiere npm install)
-```
-
-Todo PR debe llegar con tests en verde. Si agregas comportamiento, agrega
-tests que lo cubran (unitarios en la capa correspondiente; ver
-`src-ts/README.md` para la arquitectura).
-
-### Cobertura
-
-El CI (`npm run test:coverage:check`) usa los umbrales nativos del test
-runner de Node (`--test-coverage-lines/branches/functions`) y falla el
-pipeline si la cobertura baja del 85% en líneas, ramas o funciones.
-
-## Convenciones de código
+## 7. Convenciones de código
 
 - **Frontend** (`public/index.html`): construir el DOM con
   `createElement`/`textContent`, **nunca** `innerHTML` — las URLs son
   entrada de usuario y esto previene XSS almacenado.
 - **Infraestructura**: si editas `cloud-init.yaml`, sincroniza
-  `provision.sh` (y viceversa); son el mismo script en dos sitios.
+  `infra/scripts/provision.sh` (y viceversa); son el mismo script en dos
+  sitios.
 - **Mensajes de error de la API**: en español, consistentes con los
   existentes (`URL inválida`, `No encontrado`…). Cambiarlos es un breaking
   change para los tests.
 - No comitees `linker.db`, `node_modules/` ni credenciales
   (`terraform.tfvars` está gitignoreado a propósito).
 
-## Issues
+## 8. Issues
 
 Usa los formularios de issue (bug, funcionalidad, tarea técnica). Para
-vulnerabilidades de seguridad **no abras un issue público**: sigue
-[SECURITY.md](SECURITY.md).
+dudas de uso sin definir aún, abre una
+[discusión](https://github.com/co-eiv-devsecops/linker3/discussions) en
+vez de un issue. Para vulnerabilidades de seguridad **no abras un issue
+público**: sigue [SECURITY.md](SECURITY.md).
 
 ## Código de conducta
 
