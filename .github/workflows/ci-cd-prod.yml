@@ -127,7 +127,7 @@ jobs:
       - name: Empaquetar fuentes para despliegue en VM
         run: |
           mkdir -p deploy-src
-          cp -r src public package.json deploy-src/
+          cp -r src public package.json package-lock.json deploy-src/
 
       - uses: actions/upload-artifact@v4
         with:
@@ -203,6 +203,9 @@ jobs:
           target-os-username: ubuntu
           script: |
             set -euo pipefail
+            cd "$DEPLOY_PATH"
+            sudo chown -R ubuntu:ubuntu "$DEPLOY_PATH"
+            npm ci --omit=dev
             sudo systemctl restart linker
             sudo systemctl is-active --quiet linker
             curl -sf https://3.n-la-c.app/health
