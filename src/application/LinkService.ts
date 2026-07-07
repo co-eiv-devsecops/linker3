@@ -7,9 +7,9 @@ import { logger as defaultLogger, type Logger } from "../infrastructure/Logger.t
 import {
   type Counter,
   meter as defaultMeter,
+  type Gauge,
   type Histogram,
   type Meter,
-  type UpDownCounter,
 } from "../infrastructure/Metrics.ts";
 import type { ShortenRequest, ShortenResult } from "./dto.ts";
 import { LinkValidator } from "./LinkValidator.ts";
@@ -30,10 +30,12 @@ export class LinkService {
   private readonly logger: Logger;
   private readonly linksCreatedTotal: Counter;
   private readonly redirectsTotal: Counter;
-  private readonly activeLinks: UpDownCounter;
-  private readonly inFlightRedirects: UpDownCounter;
+  private readonly activeLinks: Gauge;
+  private readonly inFlightRedirects: Gauge;
   private readonly shortenDurationMs: Histogram;
   private readonly redirectDurationMs: Histogram;
+  private activeLinksCount = 0;
+  private inFlightRedirectsCount = 0;
 
   /**
    * @param repository - Storage backend for links.
@@ -61,11 +63,11 @@ export class LinkService {
       unit: "1",
       description: "Total de redirecciones resueltas",
     });
-    this.activeLinks = meter.createUpDownCounter("active_links", {
+    this.activeLinks = meter.createGauge("active_links", {
       unit: "1",
       description: "Enlaces actualmente almacenados",
     });
-    this.inFlightRedirects = meter.createUpDownCounter("in_flight_redirects", {
+    this.inFlightRedirects = meter.createGauge("in_flight_redirects", {
       unit: "1",
       description: "Redirecciones en curso de resolución",
     });
@@ -107,7 +109,8 @@ export class LinkService {
     this.logger.info("Enlace creado", { code, url: request.url, alias: useAlias });
 
     this.linksCreatedTotal.add(1);
-    this.activeLinks.add(1);
+    this.activeLinksCount += 1;
+    this.activeLinks.record(this.activeLinksCount);
     this.shortenDurationMs.record(performance.now() - start);
 
     return { code };
@@ -122,7 +125,8 @@ export class LinkService {
    */
   resolve(code: string): string {
     const start = performance.now();
-    this.inFlightRedirects.add(1);
+    this.inFlightRedirectsCount += 1;
+    this.inFlightRedirects.record(this.inFlightRedirectsCount);
     try {
       const link = this.repository.findByCode(code);
       if (!link) {
@@ -136,7 +140,8 @@ export class LinkService {
 
       return link.url;
     } finally {
-      this.inFlightRedirects.add(-1);
+      this.inFlightRedirectsCount -= 1;
+      this.inFlightRedirects.record(this.inFlightRedirectsCount);
     }
   }
 
