@@ -92,6 +92,10 @@ export class Router {
     if (url === "/launchdarkly-demo" && method === "GET") {
       const context = { kind: "user", key: "demo-user" };
       const enabled = await this.ldClient.boolVariation("my-first-flag", context, false);
+      // Deliver the evaluation event immediately instead of waiting for the
+      // periodic 5s flush, so a single request reliably registers in
+      // LaunchDarkly (e.g. onboarding "first event" detection).
+      await this.ldClient.flush();
       return sendJson(res, 200, {
         flag: "my-first-flag",
         enabled,
