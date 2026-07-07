@@ -5,7 +5,7 @@
   "type": "module",
   "main": "src/main.ts",
   "scripts": {
-    "start": "node src/main.ts",
+    "start": "node --env-file-if-exists=.env src/main.ts",
     "test": "node --test \"test/**/*.test.ts\"",
     "test:coverage": "node --test --experimental-test-coverage \"test/**/*.test.ts\"",
     "test:coverage:check": "node --test --experimental-test-coverage --test-coverage-lines=90 --test-coverage-branches=90 --test-coverage-functions=90 \"test/**/*.test.ts\"",
@@ -20,5 +20,8 @@
     "@types/node": "^24.0.0",
     "husky": "9.1.7",
     "typescript": "^5.8.0"
+  },
+  "dependencies": {
+    "@launchdarkly/node-server-sdk": "^9.11.3"
   }
 }

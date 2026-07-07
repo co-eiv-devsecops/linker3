@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { init, type LDClient } from "@launchdarkly/node-server-sdk";
 import { LinkService } from "./application/LinkService.ts";
 import { LinkValidator } from "./application/LinkValidator.ts";
 import type { AppConfig } from "./config.ts";
@@ -19,6 +20,8 @@ export interface App {
   server: Server;
   /** The SQLite-backed repository instance used by the app. */
   repository: SqliteLinkRepository;
+  /** The LaunchDarkly client instance used by the app. */
+  ldClient: LDClient;
 }
 
 /**
@@ -44,11 +47,13 @@ export function createApp(config: AppConfig, homePage?: string): App {
   const validator = new LinkValidator();
   const service = new LinkService(repository, codeGenerator, validator);
   const controller = new LinkController(service, config.baseUrl);
-  const router = new Router(controller, ui);
+  const sdkKey = process.env.LAUNCHDARKLY_SDK_KEY;
+  const ldClient = init(sdkKey ?? "", sdkKey ? undefined : { offline: true });
+  const router = new Router(controller, ui, ldClient);
 
   const server = createServer((req, res) => {
     void router.handle(req, res);
   });
 
-  return { server, repository };
+  return { server, repository, ldClient };
 }

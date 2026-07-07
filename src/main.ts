@@ -9,7 +9,14 @@ import { createApp } from "./container.ts";
 import { logger } from "./infrastructure/Logger.ts";
 
 const config = loadConfig();
-const { server } = createApp(config);
+const { server, ldClient } = createApp(config);
+
+try {
+  await ldClient.waitForInitialization({ timeout: 5 });
+  logger.info("LaunchDarkly conectado");
+} catch (err) {
+  logger.error("LaunchDarkly no se pudo inicializar", { err: String(err) });
+}
 
 server.listen(config.port, () =>
   logger.info(`Linker (TS) corriendo en ${config.baseUrl}`)
