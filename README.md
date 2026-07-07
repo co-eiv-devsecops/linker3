@@ -48,7 +48,7 @@ linker3/
 │   ├── application/      # Casos de uso (LinkService, LinkValidator, DTOs)
 │   ├── composition/      # Reservado para ensamblado adicional
 │   ├── domain/           # Entidades y contratos (Link, LinkRepository, CodeGenerator, errores)
-│   ├── infrastructure/   # Adaptadores (SqliteLinkRepository, RandomCodeGenerator, Logger)
+│   ├── infrastructure/   # Adaptadores (SqliteLinkRepository, RandomCodeGenerator, Logger, Metrics)
 │   ├── presentation/     # HTTP (Router, LinkController, utilidades)
 │   ├── config.ts         # Configuración desde variables de entorno
 │   ├── container.ts      # Composition root actual
