@@ -3,6 +3,8 @@ import { ConflictError } from "../domain/errors.ts";
 import type { Link } from "../domain/Link.ts";
 import type { LinkRepository } from "../domain/LinkRepository.ts";
 import { logger as defaultLogger, type Logger } from "./Logger.ts";
+import { tracer as defaultTracer } from "./telemetry/otel.ts";
+import { type TracerLike, withSpan } from "./telemetry/Tracing.ts";
 
 /**
  * {@link LinkRepository} implementation backed by an embedded SQLite
@@ -14,6 +16,7 @@ import { logger as defaultLogger, type Logger } from "./Logger.ts";
 export class SqliteLinkRepository implements LinkRepository {
   private readonly db: DatabaseSync;
   private readonly logger: Logger;
+  private readonly tracer: TracerLike;
 
   /**
    * Opens (or creates) the SQLite database at `dbPath` and ensures the
@@ -22,7 +25,11 @@ export class SqliteLinkRepository implements LinkRepository {
    * @param dbPath - Filesystem path to the SQLite database file.
    * @param logger - Logger used to record data-access events; defaults to the shared console logger.
    */
-  constructor(dbPath: string, logger: Logger = defaultLogger) {
+  constructor(
+    dbPath: string,
+    logger: Logger = defaultLogger,
+    tracer: TracerLike = defaultTracer
+  ) {
     this.db = new DatabaseSync(dbPath);
     this.db.exec(`CREATE TABLE IF NOT EXISTS links (
       code    TEXT PRIMARY KEY,
@@ -30,6 +37,7 @@ export class SqliteLinkRepository implements LinkRepository {
       visits  INTEGER DEFAULT 0
     )`);
     this.logger = logger;
+    this.tracer = tracer;
     this.logger.info("Base de datos SQLite abierta", { dbPath });
   }
 
@@ -52,7 +60,9 @@ export class SqliteLinkRepository implements LinkRepository {
    */
   save(code: string, url: string): void {
     try {
-      this.db.prepare("INSERT INTO links (code, url) VALUES (?, ?)").run(code, url);
+      withSpan(this.tracer, "sqlite save", { code, url }, () => {
+        this.db.prepare("INSERT INTO links (code, url) VALUES (?, ?)").run(code, url);
+      });
     } catch (e) {
       if (e instanceof Error && e.message.includes("UNIQUE constraint")) {
         this.logger.warn("Conflicto de código al guardar enlace", { code });

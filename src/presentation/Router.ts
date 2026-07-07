@@ -2,6 +2,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { LDClient } from "@launchdarkly/node-server-sdk";
 import { AppError } from "../domain/errors.ts";
 import { logger as defaultLogger, type Logger } from "../infrastructure/Logger.ts";
+import { tracer as defaultTracer } from "../infrastructure/telemetry/otel.ts";
+import { type TracerLike, withSpan } from "../infrastructure/telemetry/Tracing.ts";
 import { sendHtml, sendJson } from "./http.ts";
 import type { LinkController } from "./LinkController.ts";
 
@@ -18,6 +20,7 @@ export class Router {
   private readonly homePage: string;
   private readonly logger: Logger;
   private readonly ldClient: LDClient;
+  private readonly tracer: TracerLike;
 
   /**
    * @param controller - Controller handling link-related routes.
@@ -30,12 +33,14 @@ export class Router {
     controller: LinkController,
     homePage: string,
     ldClient: LDClient,
-    logger: Logger = defaultLogger
+    logger: Logger = defaultLogger,
+    tracer: TracerLike = defaultTracer
   ) {
     this.controller = controller;
     this.homePage = homePage;
     this.ldClient = ldClient;
     this.logger = logger;
+    this.tracer = tracer;
   }
 
   /**
@@ -49,23 +54,30 @@ export class Router {
    * @param res - Response to write to.
    */
   async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const start = Date.now();
     const { method = "GET", url = "/" } = req;
 
-    try {
-      await this.dispatch(req, res);
-      this.logger.info(`${method} ${url}`, { ms: Date.now() - start });
-    } catch (e) {
-      const ms = Date.now() - start;
-      if (e instanceof AppError) {
-        sendJson(res, e.status, { error: e.message });
-        this.logger.warn(`${method} ${url}`, { status: e.status, error: e.message, ms });
-      } else {
-        sendJson(res, 500, { error: "Error interno" });
-        const error = e instanceof Error ? (e.stack ?? e.message) : String(e);
-        this.logger.error(`${method} ${url}`, { status: 500, error, ms });
+    await withSpan(this.tracer, "request", { method, url }, async () => {
+      const start = Date.now();
+
+      try {
+        await this.dispatch(req, res);
+        this.logger.info(`${method} ${url}`, { ms: Date.now() - start });
+      } catch (e) {
+        const ms = Date.now() - start;
+        if (e instanceof AppError) {
+          sendJson(res, e.status, { error: e.message });
+          this.logger.warn(`${method} ${url}`, {
+            status: e.status,
+            error: e.message,
+            ms,
+          });
+        } else {
+          sendJson(res, 500, { error: "Error interno" });
+          const error = e instanceof Error ? (e.stack ?? e.message) : String(e);
+          this.logger.error(`${method} ${url}`, { status: 500, error, ms });
+        }
       }
-    }
+    });
   }
 
   /**
