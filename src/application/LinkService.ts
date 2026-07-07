@@ -1,8 +1,16 @@
+import { performance } from "node:perf_hooks";
 import type { CodeGenerator } from "../domain/CodeGenerator.ts";
 import { ConflictError, NotFoundError } from "../domain/errors.ts";
 import type { Link } from "../domain/Link.ts";
 import type { LinkRepository } from "../domain/LinkRepository.ts";
 import { logger as defaultLogger, type Logger } from "../infrastructure/Logger.ts";
+import {
+  type Counter,
+  meter as defaultMeter,
+  type Histogram,
+  type Meter,
+  type UpDownCounter,
+} from "../infrastructure/Metrics.ts";
 import type { ShortenRequest, ShortenResult } from "./dto.ts";
 import { LinkValidator } from "./LinkValidator.ts";
 
@@ -20,23 +28,55 @@ export class LinkService {
   private readonly codeGenerator: CodeGenerator;
   private readonly validator: LinkValidator;
   private readonly logger: Logger;
+  private readonly linksCreatedTotal: Counter;
+  private readonly redirectsTotal: Counter;
+  private readonly activeLinks: UpDownCounter;
+  private readonly inFlightRedirects: UpDownCounter;
+  private readonly shortenDurationMs: Histogram;
+  private readonly redirectDurationMs: Histogram;
 
   /**
    * @param repository - Storage backend for links.
    * @param codeGenerator - Strategy used to generate short codes when no alias is provided.
    * @param validator - Input validator; defaults to a new {@link LinkValidator} instance.
    * @param logger - Logger used to record business events; defaults to the shared console logger.
+   * @param meter - Metrics port used to record business metrics; defaults to the shared no-op meter.
    */
   constructor(
     repository: LinkRepository,
     codeGenerator: CodeGenerator,
     validator: LinkValidator = new LinkValidator(),
-    logger: Logger = defaultLogger
+    logger: Logger = defaultLogger,
+    meter: Meter = defaultMeter
   ) {
     this.repository = repository;
     this.codeGenerator = codeGenerator;
     this.validator = validator;
     this.logger = logger;
+    this.linksCreatedTotal = meter.createCounter("links_created_total", {
+      unit: "1",
+      description: "Total de enlaces cortos creados",
+    });
+    this.redirectsTotal = meter.createCounter("redirects_total", {
+      unit: "1",
+      description: "Total de redirecciones resueltas",
+    });
+    this.activeLinks = meter.createUpDownCounter("active_links", {
+      unit: "1",
+      description: "Enlaces actualmente almacenados",
+    });
+    this.inFlightRedirects = meter.createUpDownCounter("in_flight_redirects", {
+      unit: "1",
+      description: "Redirecciones en curso de resolución",
+    });
+    this.shortenDurationMs = meter.createHistogram("shorten_duration_ms", {
+      unit: "ms",
+      description: "Duración de shorten()",
+    });
+    this.redirectDurationMs = meter.createHistogram("redirect_duration_ms", {
+      unit: "ms",
+      description: "Duración de resolve()",
+    });
   }
 
   /**
@@ -49,6 +89,7 @@ export class LinkService {
    * @throws {ConflictError} If the requested alias is already taken.
    */
   shorten(request: ShortenRequest): ShortenResult {
+    const start = performance.now();
     this.validator.assertValidUrl(request.url);
 
     const useAlias = this.validator.hasAlias(request.alias);
@@ -64,6 +105,11 @@ export class LinkService {
 
     this.repository.save(code, request.url);
     this.logger.info("Enlace creado", { code, url: request.url, alias: useAlias });
+
+    this.linksCreatedTotal.add(1);
+    this.activeLinks.add(1);
+    this.shortenDurationMs.record(performance.now() - start);
+
     return { code };
   }
 
@@ -75,13 +121,23 @@ export class LinkService {
    * @throws {NotFoundError} If no link exists for `code`.
    */
   resolve(code: string): string {
-    const link = this.repository.findByCode(code);
-    if (!link) {
-      throw new NotFoundError("No encontrado");
+    const start = performance.now();
+    this.inFlightRedirects.add(1);
+    try {
+      const link = this.repository.findByCode(code);
+      if (!link) {
+        throw new NotFoundError("No encontrado");
+      }
+      this.repository.incrementVisits(code);
+      this.logger.info("Redirección resuelta", { code, url: link.url });
+
+      this.redirectsTotal.add(1);
+      this.redirectDurationMs.record(performance.now() - start);
+
+      return link.url;
+    } finally {
+      this.inFlightRedirects.add(-1);
     }
-    this.repository.incrementVisits(code);
-    this.logger.info("Redirección resuelta", { code, url: link.url });
-    return link.url;
   }
 
   /**
