@@ -208,6 +208,10 @@ jobs:
             npm ci --omit=dev --ignore-scripts
             sudo systemctl restart linker
             sudo systemctl is-active --quiet linker
+            for i in $(seq 1 15); do
+              curl -sf https://3.n-la-c.app/health > /dev/null && break
+              sleep 1
+            done
             curl -sf https://3.n-la-c.app/health
             echo "Despliegue exitoso en producción — sha: $DEPLOY_PATH"
 
