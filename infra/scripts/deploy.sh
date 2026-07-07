@@ -12,6 +12,9 @@ APP_DIR="/opt/linker"
 echo "=== Actualizando código en la VM ==="
 ssh -i "$KEY" "$USER@$HOST" "cd $APP_DIR && git pull"
 
+echo "=== Instalando dependencias ==="
+ssh -i "$KEY" "$USER@$HOST" "cd $APP_DIR && npm ci --omit=dev"
+
 echo "=== Reiniciando servicio ==="
 ssh -i "$KEY" "$USER@$HOST" "sudo systemctl restart linker"
 
