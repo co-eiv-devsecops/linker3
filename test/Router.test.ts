@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import test from "node:test";
+import { init } from "@launchdarkly/node-server-sdk";
 import { LinkService } from "../src/application/LinkService.ts";
 import type { Link } from "../src/domain/Link.ts";
 import type { LinkRepository } from "../src/domain/LinkRepository.ts";
@@ -33,7 +34,8 @@ const makeRouter = (t: { after(fn: () => void): void }, homePage = "") => {
   t.after(() => repo.close());
   const service = new LinkService(repo, new RandomCodeGenerator());
   const controller = new LinkController(service, "https://short.test");
-  return { repo, router: new Router(controller, homePage) };
+  const ldClient = init("", { offline: true });
+  return { repo, router: new Router(controller, homePage, ldClient) };
 };
 
 test("GET / responde la página principal como HTML", async (t) => {
@@ -45,6 +47,20 @@ test("GET / responde la página principal como HTML", async (t) => {
   assert.equal(res.status, 200);
   assert.equal(res.headers["Content-Type"], "text/html");
   assert.equal(res.body, "<h1>hola</h1>");
+});
+
+test("GET /launchdarkly-demo responde el estado del flag", async (t) => {
+  const { router } = makeRouter(t);
+  const res = new FakeResponse();
+
+  await router.handle(asReq("GET", "/launchdarkly-demo"), asRes(res));
+
+  assert.equal(res.status, 200);
+  assert.deepEqual(JSON.parse(res.body), {
+    flag: "my-first-flag",
+    enabled: false,
+    message: "LaunchDarkly is working — the flag is OFF",
+  });
 });
 
 test("GET /health responde 200 con estado ok y uptime", async (t) => {
@@ -106,7 +122,8 @@ test("un error inesperado responde 500 sin filtrar detalles", async () => {
   };
   const service = new LinkService(brokenRepo, new RandomCodeGenerator());
   const controller = new LinkController(service, "https://short.test");
-  const router = new Router(controller, "");
+  const ldClient = init("", { offline: true });
+  const router = new Router(controller, "", ldClient);
   const res = new FakeResponse();
 
   await router.handle(asReq("GET", "/api/links"), asRes(res));
