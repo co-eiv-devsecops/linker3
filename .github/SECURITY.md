@@ -14,6 +14,11 @@ seguridad.
 2. Incluye: descripción, pasos de reproducción, impacto estimado y, si la
    tienes, una propuesta de mitigación.
 
+Si no tienes acceso a esa función (por ejemplo, cuenta de GitHub muy nueva),
+contacta directamente por GitHub a
+[@CARDAV-45](https://github.com/CARDAV-45) o
+[@diegcard](https://github.com/diegcard), mantenedores del repositorio.
+
 Nos comprometemos a acusar recibo en un plazo razonable y a coordinar la
 divulgación una vez corregida.
 
