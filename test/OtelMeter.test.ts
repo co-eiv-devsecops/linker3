@@ -24,12 +24,12 @@ function makeMockOtelMeter() {
       created.push({ kind: "counter", name, options });
       return instrument("add", name);
     },
-    createUpDownCounter: (name: string, options?: unknown) => {
-      created.push({ kind: "upDownCounter", name, options });
-      return instrument("add", name);
-    },
     createHistogram: (name: string, options?: unknown) => {
       created.push({ kind: "histogram", name, options });
+      return instrument("record", name);
+    },
+    createGauge: (name: string, options?: unknown) => {
+      created.push({ kind: "gauge", name, options });
       return instrument("record", name);
     },
     // biome-ignore lint/suspicious/noExplicitAny: partial meter test double
@@ -43,15 +43,15 @@ test("OtelMeterAdapter delega la creación de cada tipo de instrumento", () => {
   const adapter = new OtelMeterAdapter(meter);
 
   adapter.createCounter("links_created_total", { unit: "1" });
-  adapter.createUpDownCounter("active_links", { unit: "1" });
   adapter.createHistogram("shorten_duration_ms", { unit: "ms" });
+  adapter.createGauge("active_links", { unit: "1" });
 
   assert.deepEqual(
     created.map((c) => c.kind),
-    ["counter", "upDownCounter", "histogram"]
+    ["counter", "histogram", "gauge"]
   );
   assert.equal(created[0]?.name, "links_created_total");
-  assert.deepEqual(created[2]?.options, { unit: "ms" });
+  assert.deepEqual(created[1]?.options, { unit: "ms" });
 });
 
 test("los instrumentos del adapter reenvían valores al meter de OTel", () => {
@@ -59,12 +59,12 @@ test("los instrumentos del adapter reenvían valores al meter de OTel", () => {
   const adapter = new OtelMeterAdapter(meter);
 
   adapter.createCounter("c").add(3, { route: "shorten" });
-  adapter.createUpDownCounter("g").add(-1);
   adapter.createHistogram("h").record(42);
+  adapter.createGauge("m").record(7);
 
   assert.deepEqual(recorded, [
     { name: "c", value: 3, attrs: { route: "shorten" } },
-    { name: "g", value: -1, attrs: undefined },
     { name: "h", value: 42, attrs: undefined },
+    { name: "m", value: 7, attrs: undefined },
   ]);
 });

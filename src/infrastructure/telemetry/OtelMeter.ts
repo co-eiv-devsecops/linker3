@@ -8,13 +8,7 @@
  * @module infrastructure/telemetry/OtelMeter
  */
 import type { Meter as OTelApiMeter } from "@opentelemetry/api";
-import type {
-  Counter,
-  Histogram,
-  Meter,
-  MetricOptions,
-  UpDownCounter,
-} from "../Metrics.ts";
+import type { Counter, Gauge, Histogram, Meter, MetricOptions } from "../Metrics.ts";
 import { meter as otelMeter } from "./otel.ts";
 
 /**
@@ -38,12 +32,12 @@ export class OtelMeterAdapter implements Meter {
     return this.otel.createCounter(name, options);
   }
 
-  createUpDownCounter(name: string, options?: MetricOptions): UpDownCounter {
-    return this.otel.createUpDownCounter(name, options);
-  }
-
   createHistogram(name: string, options?: MetricOptions): Histogram {
     return this.otel.createHistogram(name, options);
+  }
+
+  createGauge(name: string, options?: MetricOptions): Gauge {
+    return this.otel.createGauge(name, options);
   }
 }
 

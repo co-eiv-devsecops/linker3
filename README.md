@@ -124,8 +124,8 @@ npm start
 |---|---|---|
 | `links_created_total` | Counter | Enlaces cortos creados |
 | `redirects_total` | Counter | Redirecciones resueltas |
-| `active_links` | UpDownCounter | Enlaces almacenados (medidor) |
-| `in_flight_redirects` | UpDownCounter | Redirecciones en curso (medidor) |
+| `active_links` | Gauge | Enlaces almacenados (medidor) |
+| `in_flight_redirects` | Gauge | Redirecciones en curso (medidor) |
 | `shorten_duration_ms` | Histogram | Duración de `shorten()` |
 | `redirect_duration_ms` | Histogram | Duración de `resolve()` |
 
@@ -135,7 +135,7 @@ Para instrumentar código nuevo, un desarrollador depende solo de puertos peque�
 no del SDK de OpenTelemetry directamente (Inversión de Control + código testeable):
 
 - `Logger` (`src/infrastructure/Logger.ts`) — logging con niveles filtrables por `LOG_LEVEL`.
-- `Meter` (`src/infrastructure/Metrics.ts`) — `createCounter` / `createUpDownCounter` / `createHistogram`.
+- `Meter` (`src/infrastructure/Metrics.ts`) — `createCounter` / `createHistogram` / `createGauge`.
 - El adaptador `OtelMeterAdapter` (`src/infrastructure/telemetry/OtelMeter.ts`) conecta ese
   puerto con el `Meter` real de OpenTelemetry; el composition root (`src/container.ts`) lo inyecta.
 

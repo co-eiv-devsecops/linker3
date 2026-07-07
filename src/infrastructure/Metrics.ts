@@ -17,13 +17,13 @@ export interface Counter {
   add(value: number, attributes?: MetricAttributes): void;
 }
 
-/** Counter that can increase or decrease (e.g. `active_links`). */
-export interface UpDownCounter {
-  add(value: number, attributes?: MetricAttributes): void;
-}
-
 /** Records a distribution of values (e.g. `shorten_duration_ms`). */
 export interface Histogram {
+  record(value: number, attributes?: MetricAttributes): void;
+}
+
+/** Records the current value of a point-in-time measurement (e.g. `active_links`). */
+export interface Gauge {
   record(value: number, attributes?: MetricAttributes): void;
 }
 
@@ -35,8 +35,8 @@ export interface Histogram {
  */
 export interface Meter {
   createCounter(name: string, options?: MetricOptions): Counter;
-  createUpDownCounter(name: string, options?: MetricOptions): UpDownCounter;
   createHistogram(name: string, options?: MetricOptions): Histogram;
+  createGauge(name: string, options?: MetricOptions): Gauge;
 }
 
 /**
@@ -49,11 +49,11 @@ class NoopMeter implements Meter {
     return { add: () => {} };
   }
 
-  createUpDownCounter(): UpDownCounter {
-    return { add: () => {} };
+  createHistogram(): Histogram {
+    return { record: () => {} };
   }
 
-  createHistogram(): Histogram {
+  createGauge(): Gauge {
     return { record: () => {} };
   }
 }
