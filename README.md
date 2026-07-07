@@ -79,6 +79,15 @@ linker3/
 | PORT | 3000 | Puerto del servidor |
 | BASE_URL | http://localhost:{PORT} | URL base de enlaces cortos |
 | DB_PATH | linker.db | Ruta de la base de datos SQLite |
+| LOG_LEVEL | info | Nivel mínimo de log emitido: `debug`, `info`, `warn` o `error` |
+
+### Verbosidad de logs
+
+`LOG_LEVEL` filtra qué niveles se emiten sin recompilar ni cambiar código: solo se
+imprimen las entradas de nivel igual o superior al configurado (`debug` < `info` <
+`warn` < `error`). Por ejemplo, `LOG_LEVEL=warn` silencia los logs `debug` e `info`
+y solo muestra `warn`/`error`. Si la variable falta o tiene un valor no reconocido,
+se usa `info` por defecto.
 
 ## Comandos de desarrollo
 

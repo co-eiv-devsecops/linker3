@@ -6,6 +6,7 @@ import { init, type LDClient } from "@launchdarkly/node-server-sdk";
 import { LinkService } from "./application/LinkService.ts";
 import { LinkValidator } from "./application/LinkValidator.ts";
 import type { AppConfig } from "./config.ts";
+import { createLogger, type Logger } from "./infrastructure/Logger.ts";
 import { RandomCodeGenerator } from "./infrastructure/RandomCodeGenerator.ts";
 import { SecureCodeGenerator } from "./infrastructure/SecureCodeGenerator.ts";
 import { SqliteLinkRepository } from "./infrastructure/SqliteLinkRepository.ts";
@@ -23,6 +24,8 @@ export interface App {
   repository: SqliteLinkRepository;
   /** The LaunchDarkly client instance used by the app. */
   ldClient: LDClient;
+  /** The level-aware {@link Logger} instance used by the app, per `config.logLevel`. */
+  logger: Logger;
 }
 
 /**
@@ -43,20 +46,21 @@ export function createApp(config: AppConfig, homePage?: string): App {
       "utf8"
     );
 
-  const repository = new SqliteLinkRepository(config.dbPath);
+  const logger = createLogger(config.logLevel);
+  const repository = new SqliteLinkRepository(config.dbPath, logger);
   const codeGenerator = config.features.newCodeGen
     ? new SecureCodeGenerator()
     : new RandomCodeGenerator();
   const validator = new LinkValidator();
-  const service = new LinkService(repository, codeGenerator, validator);
+  const service = new LinkService(repository, codeGenerator, validator, logger);
   const controller = new LinkController(service, config.baseUrl);
   const sdkKey = process.env.LAUNCHDARKLY_SDK_KEY;
   const ldClient = init(sdkKey ?? "", sdkKey ? undefined : { offline: true });
-  const router = new Router(controller, ui, ldClient);
+  const router = new Router(controller, ui, ldClient, logger);
 
   const server = createServer((req, res) => {
     void router.handle(req, res);
   });
 
-  return { server, repository, ldClient };
+  return { server, repository, ldClient, logger };
 }

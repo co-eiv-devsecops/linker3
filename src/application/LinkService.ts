@@ -146,6 +146,8 @@ export class LinkService {
    * @returns All links, newest first.
    */
   list(): Link[] {
-    return this.repository.findAll();
+    const links = this.repository.findAll();
+    this.logger.debug("Enlaces listados", { count: links.length });
+    return links;
   }
 }

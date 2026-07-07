@@ -8,6 +8,7 @@ test("usa los valores por defecto con entorno vacío", () => {
     baseUrl: "http://localhost:3000",
     dbPath: "linker.db",
     features: { newCodeGen: false },
+    logLevel: "info",
   });
 });
 
@@ -23,7 +24,19 @@ test("respeta PORT, BASE_URL y DB_PATH del entorno", () => {
     baseUrl: "https://short.example.com",
     dbPath: "/data/links.db",
     features: { newCodeGen: false },
+    logLevel: "info",
   });
+});
+
+test("LOG_LEVEL se propaga cuando es un nivel válido", () => {
+  assert.equal(loadConfig({ LOG_LEVEL: "debug" }).logLevel, "debug");
+  assert.equal(loadConfig({ LOG_LEVEL: "warn" }).logLevel, "warn");
+  assert.equal(loadConfig({ LOG_LEVEL: "error" }).logLevel, "error");
+});
+
+test("LOG_LEVEL ausente o inválido cae al valor por defecto (info)", () => {
+  assert.equal(loadConfig({}).logLevel, "info");
+  assert.equal(loadConfig({ LOG_LEVEL: "verbose" }).logLevel, "info");
 });
 
 test("FEATURE_NEW_CODE_GEN=true activa features.newCodeGen", () => {
