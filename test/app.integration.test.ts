@@ -12,6 +12,7 @@ async function startApp(t: { after(fn: () => Promise<void> | void): void }) {
       baseUrl: "https://short.test",
       dbPath: ":memory:",
       features: { newCodeGen: false },
+      logLevel: "error",
     },
     HOME
   );

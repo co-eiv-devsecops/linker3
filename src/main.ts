@@ -6,10 +6,9 @@
  */
 import { loadConfig } from "./config.ts";
 import { createApp } from "./container.ts";
-import { logger } from "./infrastructure/Logger.ts";
 
 const config = loadConfig();
-const { server, ldClient } = createApp(config);
+const { server, ldClient, logger } = createApp(config);
 
 try {
   await ldClient.waitForInitialization({ timeout: 5 });

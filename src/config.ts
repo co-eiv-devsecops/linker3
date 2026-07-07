@@ -1,3 +1,5 @@
+import { type LogLevel, parseLogLevel } from "./infrastructure/Logger.ts";
+
 /**
  * Feature toggles that select between alternative implementations at
  * startup. Unlike LaunchDarkly-backed flags, these are read once from
@@ -20,6 +22,8 @@ export interface AppConfig {
   readonly dbPath: string;
   /** Build-time feature toggles; see {@link FeatureFlags}. */
   readonly features: FeatureFlags;
+  /** Minimum log level emitted; see {@link LogLevel}. */
+  readonly logLevel: LogLevel;
 }
 
 /**
@@ -27,8 +31,9 @@ export interface AppConfig {
  * sensible defaults when they are missing or invalid.
  *
  * Recognized variables: `PORT` (default `3000`), `BASE_URL` (default
- * `http://localhost:${port}`), `DB_PATH` (default `linker.db`), and
- * `FEATURE_NEW_CODE_GEN` (default `false`).
+ * `http://localhost:${port}`), `DB_PATH` (default `linker.db`),
+ * `FEATURE_NEW_CODE_GEN` (default `false`), and `LOG_LEVEL` (default
+ * `info`; one of `debug`/`info`/`warn`/`error`).
  *
  * @param env - Environment variables source; defaults to `process.env`.
  * @returns The resolved application configuration.
@@ -44,5 +49,6 @@ export function loadConfig(
     features: {
       newCodeGen: env.FEATURE_NEW_CODE_GEN === "true",
     },
+    logLevel: parseLogLevel(env.LOG_LEVEL),
   };
 }

@@ -38,6 +38,7 @@ export class SqliteLinkRepository implements LinkRepository {
    * @returns The matching {@link Link}, or `null` if none exists.
    */
   findByCode(code: string): Link | null {
+    this.logger.debug("Buscando enlace por código", { code });
     const row = this.db
       .prepare("SELECT code, url, visits FROM links WHERE code = ?")
       .get(code) as Link | undefined;
@@ -65,6 +66,7 @@ export class SqliteLinkRepository implements LinkRepository {
    * @param code - Short code whose visit count should be incremented.
    */
   incrementVisits(code: string): void {
+    this.logger.debug("Incrementando contador de visitas", { code });
     this.db.prepare("UPDATE links SET visits = visits + 1 WHERE code = ?").run(code);
   }
 

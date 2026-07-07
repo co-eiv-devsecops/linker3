@@ -84,6 +84,7 @@ export class Router {
     }
 
     if (url === "/health" && method === "GET") {
+      this.logger.debug("Chequeo de salud solicitado", { uptime: process.uptime() });
       return sendJson(res, 200, { status: "ok", uptime: process.uptime() });
     }
 
