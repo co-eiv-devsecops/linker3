@@ -7,6 +7,7 @@ test("usa los valores por defecto con entorno vacío", () => {
     port: 3000,
     baseUrl: "http://localhost:3000",
     dbPath: "linker.db",
+    features: { newCodeGen: false },
   });
 });
 
@@ -21,7 +22,17 @@ test("respeta PORT, BASE_URL y DB_PATH del entorno", () => {
     port: 8080,
     baseUrl: "https://short.example.com",
     dbPath: "/data/links.db",
+    features: { newCodeGen: false },
   });
+});
+
+test("FEATURE_NEW_CODE_GEN=true activa features.newCodeGen", () => {
+  assert.equal(loadConfig({ FEATURE_NEW_CODE_GEN: "true" }).features.newCodeGen, true);
+});
+
+test("FEATURE_NEW_CODE_GEN=false o ausente deja features.newCodeGen en false", () => {
+  assert.equal(loadConfig({ FEATURE_NEW_CODE_GEN: "false" }).features.newCodeGen, false);
+  assert.equal(loadConfig({}).features.newCodeGen, false);
 });
 
 test("BASE_URL por defecto refleja el puerto configurado", () => {

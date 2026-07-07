@@ -7,6 +7,7 @@ import { LinkService } from "./application/LinkService.ts";
 import { LinkValidator } from "./application/LinkValidator.ts";
 import type { AppConfig } from "./config.ts";
 import { RandomCodeGenerator } from "./infrastructure/RandomCodeGenerator.ts";
+import { SecureCodeGenerator } from "./infrastructure/SecureCodeGenerator.ts";
 import { SqliteLinkRepository } from "./infrastructure/SqliteLinkRepository.ts";
 import { LinkController } from "./presentation/LinkController.ts";
 import { Router } from "./presentation/Router.ts";
@@ -43,7 +44,9 @@ export function createApp(config: AppConfig, homePage?: string): App {
     );
 
   const repository = new SqliteLinkRepository(config.dbPath);
-  const codeGenerator = new RandomCodeGenerator();
+  const codeGenerator = config.features.newCodeGen
+    ? new SecureCodeGenerator()
+    : new RandomCodeGenerator();
   const validator = new LinkValidator();
   const service = new LinkService(repository, codeGenerator, validator);
   const controller = new LinkController(service, config.baseUrl);
