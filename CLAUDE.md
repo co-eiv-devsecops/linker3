@@ -82,6 +82,7 @@ Vanilla JS, no framework. Calls `POST /api/shorten`, lists existing links from `
 | `PORT` | `3000` | Listening port |
 | `BASE_URL` | `http://localhost:${PORT}` | Base for generated short URLs and startup log |
 | `DB_PATH` | `linker.db` | SQLite file path |
+| `FEATURE_NEW_CODE_GEN` | `false` | `true` wires `SecureCodeGenerator` (base62) instead of `RandomCodeGenerator` (hex) in `src/container.ts`. Read once at startup via `loadConfig()`; no runtime toggling. |
 
 ## Deployment / IaC
 
