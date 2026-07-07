@@ -10,6 +10,7 @@ import { createLogger, type Logger } from "./infrastructure/Logger.ts";
 import { RandomCodeGenerator } from "./infrastructure/RandomCodeGenerator.ts";
 import { SecureCodeGenerator } from "./infrastructure/SecureCodeGenerator.ts";
 import { SqliteLinkRepository } from "./infrastructure/SqliteLinkRepository.ts";
+import { createOtelMeter } from "./infrastructure/telemetry/OtelMeter.ts";
 import { LinkController } from "./presentation/LinkController.ts";
 import { Router } from "./presentation/Router.ts";
 
@@ -52,7 +53,10 @@ export function createApp(config: AppConfig, homePage?: string): App {
     ? new SecureCodeGenerator()
     : new RandomCodeGenerator();
   const validator = new LinkValidator();
-  const service = new LinkService(repository, codeGenerator, validator, logger);
+  // Inject the OpenTelemetry-backed meter so business metrics are actually
+  // recorded and exported over OTLP (instead of the default no-op meter).
+  const meter = createOtelMeter();
+  const service = new LinkService(repository, codeGenerator, validator, logger, meter);
   const controller = new LinkController(service, config.baseUrl);
   const sdkKey = process.env.LAUNCHDARKLY_SDK_KEY;
   const ldClient = init(sdkKey ?? "", sdkKey ? undefined : { offline: true });

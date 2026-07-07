@@ -80,6 +80,11 @@ linker3/
 | BASE_URL | http://localhost:{PORT} | URL base de enlaces cortos |
 | DB_PATH | linker.db | Ruta de la base de datos SQLite |
 | LOG_LEVEL | info | Nivel mínimo de log emitido: `debug`, `info`, `warn` o `error` |
+| LAUNCHDARKLY_SDK_KEY | (vacío → modo offline) | Server-side SDK key de LaunchDarkly |
+| OTEL_EXPORTER_OTLP_ENDPOINT | http://localhost:4318 | Endpoint OTLP donde se exportan logs, métricas y trazas |
+| OTEL_EXPORTER_OTLP_PROTOCOL | http/protobuf | Protocolo del exporter OTLP (`http/protobuf` o `http/json`) |
+| OTEL_METRIC_EXPORT_INTERVAL | 60000 | Intervalo (ms) de push de métricas al colector |
+| OTEL_SERVICE_NAME | linker | Nombre de servicio reportado en la telemetría |
 
 ### Verbosidad de logs
 
@@ -88,6 +93,69 @@ imprimen las entradas de nivel igual o superior al configurado (`debug` < `info`
 `warn` < `error`). Por ejemplo, `LOG_LEVEL=warn` silencia los logs `debug` e `info`
 y solo muestra `warn`/`error`. Si la variable falta o tiene un valor no reconocido,
 se usa `info` por defecto.
+
+El cambio se hace sobre el **mismo artefacto desplegable**: es solo una variable de
+entorno, sin recompilar ni tocar el código. Ejemplo en producción:
+
+```bash
+LOG_LEVEL=warn npm start
+```
+
+## Observabilidad (OpenTelemetry)
+
+La app está instrumentada con OpenTelemetry (logs, métricas y trazas) y exporta por
+OTLP. El SDK se inicializa en `src/infrastructure/telemetry/otel.ts` antes de armar
+la aplicación, y toma el destino desde variables de entorno — el **mismo artefacto**
+apunta a un colector local o a Grafana Cloud cambiando solo `OTEL_EXPORTER_OTLP_ENDPOINT`:
+
+```bash
+# Local (colector en el puerto por defecto 4318)
+npm start
+
+# Grafana Cloud (u otro backend OTLP): solo cambia el endpoint y las credenciales
+OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp-gateway-...grafana.net/otlp \
+OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic <token>" \
+npm start
+```
+
+### Métricas expuestas
+
+| Métrica | Tipo | Descripción |
+|---|---|---|
+| `links_created_total` | Counter | Enlaces cortos creados |
+| `redirects_total` | Counter | Redirecciones resueltas |
+| `active_links` | UpDownCounter | Enlaces almacenados (medidor) |
+| `in_flight_redirects` | UpDownCounter | Redirecciones en curso (medidor) |
+| `shorten_duration_ms` | Histogram | Duración de `shorten()` |
+| `redirect_duration_ms` | Histogram | Duración de `resolve()` |
+
+### Biblioteca de instrumentación (mínimo código)
+
+Para instrumentar código nuevo, un desarrollador depende solo de puertos pequeños,
+no del SDK de OpenTelemetry directamente (Inversión de Control + código testeable):
+
+- `Logger` (`src/infrastructure/Logger.ts`) — logging con niveles filtrables por `LOG_LEVEL`.
+- `Meter` (`src/infrastructure/Metrics.ts`) — `createCounter` / `createUpDownCounter` / `createHistogram`.
+- El adaptador `OtelMeterAdapter` (`src/infrastructure/telemetry/OtelMeter.ts`) conecta ese
+  puerto con el `Meter` real de OpenTelemetry; el composition root (`src/container.ts`) lo inyecta.
+
+```ts
+// El colaborador recibe el puerto por constructor; no sabe de OpenTelemetry.
+class MiServicio {
+  private readonly creados: Counter;
+  constructor(meter: Meter, private readonly logger: Logger) {
+    this.creados = meter.createCounter("mi_metrica_total", { unit: "1" });
+  }
+  hacerAlgo() {
+    this.creados.add(1);
+    this.logger.info("algo ocurrió");
+  }
+}
+```
+
+Como el puerto es una interfaz, los tests inyectan un meter/logger falso y verifican
+la instrumentación sin backend real (ver `test/LinkService.metrics.test.ts`,
+`test/OtelMeter.test.ts` y `test/Logger.test.ts`).
 
 ## Comandos de desarrollo
 
