@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import type { LDClient } from "@launchdarkly/node-server-sdk";
 import { AppError } from "../domain/errors.ts";
 import { logger as defaultLogger, type Logger } from "../infrastructure/Logger.ts";
 import { sendHtml, sendJson } from "./http.ts";
@@ -16,20 +17,24 @@ export class Router {
   private readonly controller: LinkController;
   private readonly homePage: string;
   private readonly logger: Logger;
+  private readonly ldClient: LDClient;
 
   /**
    * @param controller - Controller handling link-related routes.
    * @param homePage - HTML markup served for `/` and `/index.html`.
+   * @param ldClient - Initialized LaunchDarkly client, used by the demo route.
    * @param logger - Logger used to record each request; defaults to the
    * shared console logger.
    */
   constructor(
     controller: LinkController,
     homePage: string,
+    ldClient: LDClient,
     logger: Logger = defaultLogger
   ) {
     this.controller = controller;
     this.homePage = homePage;
+    this.ldClient = ldClient;
     this.logger = logger;
   }
 
@@ -80,6 +85,19 @@ export class Router {
 
     if (url === "/health" && method === "GET") {
       return sendJson(res, 200, { status: "ok", uptime: process.uptime() });
+    }
+
+    // LaunchDarkly demo - safe to remove
+    if (url === "/launchdarkly-demo" && method === "GET") {
+      const context = { kind: "user", key: "demo-user" };
+      const enabled = await this.ldClient.boolVariation("my-first-flag", context, false);
+      return sendJson(res, 200, {
+        flag: "my-first-flag",
+        enabled,
+        message: enabled
+          ? "LaunchDarkly is working — the flag is ON"
+          : "LaunchDarkly is working — the flag is OFF",
+      });
     }
 
     if (url === "/api/links" && method === "GET") {

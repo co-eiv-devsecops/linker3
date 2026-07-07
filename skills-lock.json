@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "skills": {
+    "find-skills": {
+      "source": "vercel-labs/skills",
+      "sourceType": "github",
+      "skillPath": "skills/find-skills/SKILL.md",
+      "computedHash": "781bd6d3f9b19f8c9af6b53d8d0e4876d0183841b565db34ca7092ffa412d111"
+    },
+    "launchdarkly-flag-cleanup": {
+      "source": "launchdarkly/ai-tooling",
+      "sourceType": "github",
+      "skillPath": "skills/feature-flags/launchdarkly-flag-cleanup/SKILL.md",
+      "computedHash": "66814fd8b41fc7bee91ef394a29bf0161437cec2248dd8e2ed2b13f32f889ab5"
+    },
+    "launchdarkly-flag-create": {
+      "source": "launchdarkly/ai-tooling",
+      "sourceType": "github",
+      "skillPath": "skills/feature-flags/launchdarkly-flag-create/SKILL.md",
+      "computedHash": "e7cbdc430248fdc6faa384c8bf640f05211a2f812ec3ffd134b5b02f500055fe"
+    },
+    "launchdarkly-flag-discovery": {
+      "source": "launchdarkly/ai-tooling",
+      "sourceType": "github",
+      "skillPath": "skills/feature-flags/launchdarkly-flag-discovery/SKILL.md",
+      "computedHash": "cdcd3d427e6783b1479ef8567b6c5574f91f8fbe55df1bd31fa35ac2b661490d"
+    },
+    "launchdarkly-flag-targeting": {
+      "source": "launchdarkly/ai-tooling",
+      "sourceType": "github",
+      "skillPath": "skills/feature-flags/launchdarkly-flag-targeting/SKILL.md",
+      "computedHash": "b301e96b2174bfc11e2b62a08062b89f5bfb6fdcb9ca2acdfd3851090bb005e0"
+    },
+    "onboarding": {
+      "source": "launchdarkly/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/onboarding/SKILL.md",
+      "computedHash": "cdedfbe12d75f67bfa40d5f5f63c9b7fc4f5b35126ed77662c6a59bada58b7a3"
+    },
+    "tdd": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/tdd/SKILL.md",
+      "computedHash": "f23403cf05c3a4b0dec9983f7818cf1b53ebddd9cc406593fa46d9694b8c259a"
+    },
+    "typescript-mcp-server-generator": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "skillPath": "skills/typescript-mcp-server-generator/SKILL.md",
+      "computedHash": "d7add3c0bf0b16006283fcb77748eb7025d574c5e2d15306d767fb901d47ad37"
+    }
+  }
+}
