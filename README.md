@@ -1,5 +1,7 @@
 # Linker
 
+[![CI/CD - Prod](https://github.com/co-eiv-devsecops/linker3/actions/workflows/ci-cd-prod.yml/badge.svg?branch=main)](https://github.com/co-eiv-devsecops/linker3/actions/workflows/ci-cd-prod.yml)
+
 Acortador de URLs en Node.js con SQLite integrado y arquitectura por capas.
 
 Producción: <https://3.n-la-c.app>
