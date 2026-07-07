@@ -19,7 +19,7 @@
     "@biomejs/biome": "2.5.2",
     "@types/node": "^24.0.0",
     "husky": "9.1.7",
-    "typescript": "^5.8.0"
+    "typescript": "^6.0.3"
   },
   "dependencies": {
     "@launchdarkly/node-server-sdk": "^9.11.3",
