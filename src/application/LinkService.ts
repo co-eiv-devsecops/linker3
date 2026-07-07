@@ -11,6 +11,8 @@ import {
   type Histogram,
   type Meter,
 } from "../infrastructure/Metrics.ts";
+import { tracer as defaultTracer } from "../infrastructure/telemetry/otel.ts";
+import { type TracerLike, withSpan } from "../infrastructure/telemetry/Tracing.ts";
 import type { ShortenRequest, ShortenResult } from "./dto.ts";
 import { LinkValidator } from "./LinkValidator.ts";
 
@@ -34,6 +36,7 @@ export class LinkService {
   private readonly inFlightRedirects: Gauge;
   private readonly shortenDurationMs: Histogram;
   private readonly redirectDurationMs: Histogram;
+  private readonly tracer: TracerLike;
   private activeLinksCount = 0;
   private inFlightRedirectsCount = 0;
 
@@ -49,12 +52,14 @@ export class LinkService {
     codeGenerator: CodeGenerator,
     validator: LinkValidator = new LinkValidator(),
     logger: Logger = defaultLogger,
-    meter: Meter = defaultMeter
+    meter: Meter = defaultMeter,
+    tracer: TracerLike = defaultTracer
   ) {
     this.repository = repository;
     this.codeGenerator = codeGenerator;
     this.validator = validator;
     this.logger = logger;
+    this.tracer = tracer;
     this.linksCreatedTotal = meter.createCounter("links_created_total", {
       unit: "1",
       description: "Total de enlaces cortos creados",
@@ -128,17 +133,25 @@ export class LinkService {
     this.inFlightRedirectsCount += 1;
     this.inFlightRedirects.record(this.inFlightRedirectsCount);
     try {
-      const link = this.repository.findByCode(code);
-      if (!link) {
-        throw new NotFoundError("No encontrado");
-      }
-      this.repository.incrementVisits(code);
-      this.logger.info("Redirección resuelta", { code, url: link.url });
+      return withSpan(this.tracer, "lookup", { code }, (lookupSpan) => {
+        const link = this.repository.findByCode(code);
+        if (!link) {
+          throw new NotFoundError("No encontrado");
+        }
 
-      this.redirectsTotal.add(1);
-      this.redirectDurationMs.record(performance.now() - start);
+        lookupSpan.setAttribute("url", link.url);
 
-      return link.url;
+        withSpan(this.tracer, "increment visits", { code, url: link.url }, () => {
+          this.repository.incrementVisits(code);
+        });
+
+        this.logger.info("Redirección resuelta", { code, url: link.url });
+
+        this.redirectsTotal.add(1);
+        this.redirectDurationMs.record(performance.now() - start);
+
+        return link.url;
+      });
     } finally {
       this.inFlightRedirectsCount -= 1;
       this.inFlightRedirects.record(this.inFlightRedirectsCount);
