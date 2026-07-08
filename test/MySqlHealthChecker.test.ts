@@ -28,7 +28,7 @@ function makeMockTracer() {
   return { tracer, events };
 }
 
-test("check() ejecuta SELECT 1 dentro de un span 'mysql select 1'", async () => {
+test("check() ejecuta SELECT 1 dentro de un span 'db.mysql.healthcheck'", async () => {
   const { tracer, events } = makeMockTracer();
   const queries: string[] = [];
   const pool = {
@@ -45,8 +45,8 @@ test("check() ejecuta SELECT 1 dentro de un span 'mysql select 1'", async () => 
   assert.deepEqual(
     events.map((e) => [e.type, e.name]),
     [
-      ["start", "mysql select 1"],
-      ["end", "mysql select 1"],
+      ["start", "db.mysql.healthcheck"],
+      ["end", "db.mysql.healthcheck"],
     ]
   );
 });

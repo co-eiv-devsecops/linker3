@@ -16,7 +16,7 @@ export class MySqlHealthChecker implements HealthChecker {
   /**
    * @param pool - `mysql2/promise` connection pool to check against.
    * @param logger - Logger used to record check failures; defaults to the shared console logger.
-   * @param tracer - Tracer used to record the `mysql select 1` span; defaults to the shared OpenTelemetry tracer.
+   * @param tracer - Tracer used to record the `db.mysql.healthcheck` span; defaults to the shared OpenTelemetry tracer.
    */
   constructor(
     pool: Pool,
@@ -29,15 +29,20 @@ export class MySqlHealthChecker implements HealthChecker {
   }
 
   /**
-   * Runs `SELECT 1` against the pool inside a `mysql select 1` span.
+   * Runs `SELECT 1` against the pool inside a `db.mysql.healthcheck` span.
    *
    * @throws If the query fails (connection refused, auth failure, etc.).
    */
   async check(): Promise<void> {
     try {
-      await withSpan(this.tracer, "mysql select 1", {}, async () => {
-        await this.pool.query("SELECT 1");
-      });
+      await withSpan(
+        this.tracer,
+        "db.mysql.healthcheck",
+        { "db.system": "mysql", "db.statement": "SELECT 1" },
+        async () => {
+          await this.pool.query("SELECT 1");
+        }
+      );
     } catch (e) {
       this.logger.error("Healthcheck de MySQL falló", {
         error: e instanceof Error ? e.message : String(e),
