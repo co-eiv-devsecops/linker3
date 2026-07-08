@@ -46,11 +46,19 @@ export class SqliteLinkRepository implements LinkRepository {
    * @returns The matching {@link Link}, or `null` if none exists.
    */
   findByCode(code: string): Link | null {
-    this.logger.debug("Buscando enlace por código", { code });
-    const row = this.db
-      .prepare("SELECT code, url, visits FROM links WHERE code = ?")
-      .get(code) as Link | undefined;
-    return row ? SqliteLinkRepository.toEntity(row) : null;
+    return withSpan(
+      this.tracer,
+      "db.sqlite.find_by_code",
+      { "db.system": "sqlite", code },
+      (span) => {
+        this.logger.debug("Buscando enlace por código", { code });
+        const row = this.db
+          .prepare("SELECT code, url, visits FROM links WHERE code = ?")
+          .get(code) as Link | undefined;
+        span.setAttribute("found", row !== undefined);
+        return row ? SqliteLinkRepository.toEntity(row) : null;
+      }
+    );
   }
 
   /**
@@ -60,9 +68,14 @@ export class SqliteLinkRepository implements LinkRepository {
    */
   save(code: string, url: string): void {
     try {
-      withSpan(this.tracer, "sqlite save", { code, url }, () => {
-        this.db.prepare("INSERT INTO links (code, url) VALUES (?, ?)").run(code, url);
-      });
+      withSpan(
+        this.tracer,
+        "db.sqlite.save_link",
+        { "db.system": "sqlite", code, url },
+        () => {
+          this.db.prepare("INSERT INTO links (code, url) VALUES (?, ?)").run(code, url);
+        }
+      );
     } catch (e) {
       if (e instanceof Error && e.message.includes("UNIQUE constraint")) {
         this.logger.warn("Conflicto de código al guardar enlace", { code });
@@ -76,18 +89,33 @@ export class SqliteLinkRepository implements LinkRepository {
    * @param code - Short code whose visit count should be incremented.
    */
   incrementVisits(code: string): void {
-    this.logger.debug("Incrementando contador de visitas", { code });
-    this.db.prepare("UPDATE links SET visits = visits + 1 WHERE code = ?").run(code);
+    withSpan(
+      this.tracer,
+      "db.sqlite.increment_visits",
+      { "db.system": "sqlite", code },
+      () => {
+        this.logger.debug("Incrementando contador de visitas", { code });
+        this.db.prepare("UPDATE links SET visits = visits + 1 WHERE code = ?").run(code);
+      }
+    );
   }
 
   /**
    * @returns All stored links, ordered by insertion order (newest first).
    */
   findAll(): Link[] {
-    const rows = this.db
-      .prepare("SELECT code, url, visits FROM links ORDER BY rowid DESC")
-      .all() as unknown as Link[];
-    return rows.map(SqliteLinkRepository.toEntity);
+    return withSpan(
+      this.tracer,
+      "db.sqlite.find_all",
+      { "db.system": "sqlite" },
+      (span) => {
+        const rows = this.db
+          .prepare("SELECT code, url, visits FROM links ORDER BY rowid DESC")
+          .all() as unknown as Link[];
+        span.setAttribute("count", rows.length);
+        return rows.map(SqliteLinkRepository.toEntity);
+      }
+    );
   }
 
   /**

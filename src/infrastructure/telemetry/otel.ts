@@ -23,10 +23,12 @@ import { PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 
 /**
- * Logical name reported for this service in every trace, metric and log.
- * Overridable via `OTEL_SERVICE_NAME` without touching source.
+ * Logical name reported for this service (`service.name` resource
+ * attribute) in every trace, metric and log — this is what identifies
+ * this deployment among others in the observability backend (e.g.
+ * Grafana). Overridable via `OTEL_SERVICE_NAME` without touching source.
  */
-const SERVICE_NAME = process.env.OTEL_SERVICE_NAME ?? "linker";
+const SERVICE_NAME = process.env.OTEL_SERVICE_NAME ?? "linker-3";
 
 /**
  * Semantic version attached to the emitted telemetry (instrumentation scope).

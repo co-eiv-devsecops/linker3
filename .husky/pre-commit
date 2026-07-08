@@ -1,3 +1,15 @@
+branch_name=$(git symbolic-ref --short HEAD)
+
+if [ "$branch_name" = "main" ]; then
+    echo "You cannot commit directly to the main branch."
+    exit 1
+fi
+
+if [ "$branch_name" = "develop" ]; then
+    echo "You cannot commit directly to the develop branch."
+    exit 1
+fi
+
 files=$(git diff --name-only --cached --diff-filter=ACMR -- '*.ts' '*.json')
 
 if [ -n "$files" ]; then
@@ -6,3 +18,4 @@ if [ -n "$files" ]; then
 fi
 
 npm run typecheck
+npm test

@@ -14,11 +14,13 @@ import { Router } from "../src/presentation/Router.ts";
 
 class FakeResponse {
   status = 0;
+  statusCode = 0;
   headers: Record<string, string> = {};
   body = "";
 
   writeHead(status: number, headers: Record<string, string>) {
     this.status = status;
+    this.statusCode = status;
     this.headers = headers;
     return this;
   }
@@ -157,8 +159,8 @@ test("GET /healthz responde 200 cuando el healthChecker pasa", async (t) => {
       .filter((event) => event.type !== "set")
       .map((event) => [event.type, event.name, event.parent]),
     [
-      ["start", "request", null],
-      ["end", "request", null],
+      ["start", "http.request", null],
+      ["end", "http.request", null],
     ]
   );
 });
@@ -226,12 +228,16 @@ test("una ruta desconocida se despacha como redirección por código", async (t)
       .filter((event) => event.type !== "set")
       .map((event) => [event.type, event.name, event.parent]),
     [
-      ["start", "request", null],
-      ["start", "lookup", "request"],
-      ["start", "increment visits", "lookup"],
-      ["end", "increment visits", "lookup"],
-      ["end", "lookup", "request"],
-      ["end", "request", null],
+      ["start", "http.request", null],
+      ["start", "link.resolve", "http.request"],
+      ["start", "db.sqlite.find_by_code", "link.resolve"],
+      ["end", "db.sqlite.find_by_code", "link.resolve"],
+      ["start", "link.visit.increment", "link.resolve"],
+      ["start", "db.sqlite.increment_visits", "link.visit.increment"],
+      ["end", "db.sqlite.increment_visits", "link.visit.increment"],
+      ["end", "link.visit.increment", "link.resolve"],
+      ["end", "link.resolve", "http.request"],
+      ["end", "http.request", null],
     ]
   );
   assert.ok(
@@ -274,10 +280,12 @@ test("POST /api/shorten abre un request span y un span anidado de SQLite", async
       .filter((event) => event.type !== "set")
       .map((event) => [event.type, event.name, event.parent]),
     [
-      ["start", "request", null],
-      ["start", "sqlite save", "request"],
-      ["end", "sqlite save", "request"],
-      ["end", "request", null],
+      ["start", "http.request", null],
+      ["start", "link.shorten", "http.request"],
+      ["start", "db.sqlite.save_link", "link.shorten"],
+      ["end", "db.sqlite.save_link", "link.shorten"],
+      ["end", "link.shorten", "http.request"],
+      ["end", "http.request", null],
     ]
   );
   assert.ok(
