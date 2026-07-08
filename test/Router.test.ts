@@ -129,6 +129,75 @@ test("GET /health responde 200 con estado ok y uptime", async (t) => {
   assert.equal(typeof body.uptime, "number");
 });
 
+test("GET /healthz responde 200 cuando el healthChecker pasa", async (t) => {
+  const { tracer, events } = makeMockTracer();
+  const repo = new SqliteLinkRepository(":memory:", undefined, tracer);
+  t.after(() => repo.close());
+  const service = new LinkService(
+    repo,
+    new RandomCodeGenerator(),
+    undefined,
+    undefined,
+    undefined,
+    tracer
+  );
+  const controller = new LinkController(service, "https://short.test");
+  const ldClient = init("", { offline: true });
+  const router = new Router(controller, "", ldClient, undefined, tracer, {
+    check: () => Promise.resolve(),
+  });
+  const res = new FakeResponse();
+
+  await router.handle(asReq("GET", "/healthz"), asRes(res));
+
+  assert.equal(res.status, 200);
+  assert.deepEqual(JSON.parse(res.body), { status: "ok" });
+  assert.deepEqual(
+    events
+      .filter((event) => event.type !== "set")
+      .map((event) => [event.type, event.name, event.parent]),
+    [
+      ["start", "request", null],
+      ["end", "request", null],
+    ]
+  );
+});
+
+test("GET /healthz responde 503 cuando el healthChecker falla", async (t) => {
+  const { tracer } = makeMockTracer();
+  const repo = new SqliteLinkRepository(":memory:", undefined, tracer);
+  t.after(() => repo.close());
+  const service = new LinkService(
+    repo,
+    new RandomCodeGenerator(),
+    undefined,
+    undefined,
+    undefined,
+    tracer
+  );
+  const controller = new LinkController(service, "https://short.test");
+  const ldClient = init("", { offline: true });
+  const router = new Router(controller, "", ldClient, undefined, tracer, {
+    check: () => Promise.reject(new Error("conexión rechazada")),
+  });
+  const res = new FakeResponse();
+
+  await router.handle(asReq("GET", "/healthz"), asRes(res));
+
+  assert.equal(res.status, 503);
+  assert.deepEqual(JSON.parse(res.body), { status: "error" });
+});
+
+test("GET /healthz sin healthChecker configurado responde 503", async (t) => {
+  const { router } = makeRouter(t);
+  const res = new FakeResponse();
+
+  await router.handle(asReq("GET", "/healthz"), asRes(res));
+
+  assert.equal(res.status, 503);
+  assert.deepEqual(JSON.parse(res.body), { status: "error" });
+});
+
 test("GET /api/links delega en controller.list", async (t) => {
   const { repo, router } = makeRouter(t);
   repo.save("abc", "https://www.wikipedia.org");

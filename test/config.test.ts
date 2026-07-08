@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadConfig } from "../src/config.ts";
 
+const emptyMysql = { host: "", database: "", user: "", password: "" };
+
 test("usa los valores por defecto con entorno vacío", () => {
   assert.deepEqual(loadConfig({}), {
     port: 3000,
@@ -9,6 +11,7 @@ test("usa los valores por defecto con entorno vacío", () => {
     dbPath: "linker.db",
     features: { newCodeGen: false },
     logLevel: "info",
+    mysql: emptyMysql,
   });
 });
 
@@ -25,6 +28,23 @@ test("respeta PORT, BASE_URL y DB_PATH del entorno", () => {
     dbPath: "/data/links.db",
     features: { newCodeGen: false },
     logLevel: "info",
+    mysql: emptyMysql,
+  });
+});
+
+test("respeta las variables MYSQL_* del entorno", () => {
+  const config = loadConfig({
+    MYSQL_HOST: "10.0.65.126",
+    MYSQL_DATABASE: "linker_db_1",
+    MYSQL_USER: "linker_user_1",
+    MYSQL_PWD: "secreto",
+  });
+
+  assert.deepEqual(config.mysql, {
+    host: "10.0.65.126",
+    database: "linker_db_1",
+    user: "linker_user_1",
+    password: "secreto",
   });
 });
 

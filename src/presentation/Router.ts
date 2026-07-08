@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { LDClient } from "@launchdarkly/node-server-sdk";
 import { AppError } from "../domain/errors.ts";
+import type { HealthChecker } from "../domain/HealthChecker.ts";
 import { logger as defaultLogger, type Logger } from "../infrastructure/Logger.ts";
 import { tracer as defaultTracer } from "../infrastructure/telemetry/otel.ts";
 import { type TracerLike, withSpan } from "../infrastructure/telemetry/Tracing.ts";
@@ -21,6 +22,7 @@ export class Router {
   private readonly logger: Logger;
   private readonly ldClient: LDClient;
   private readonly tracer: TracerLike;
+  private readonly healthChecker: HealthChecker;
 
   /**
    * @param controller - Controller handling link-related routes.
@@ -28,19 +30,27 @@ export class Router {
    * @param ldClient - Initialized LaunchDarkly client, used by the demo route.
    * @param logger - Logger used to record each request; defaults to the
    * shared console logger.
+   * @param tracer - Tracer used to record the request span; defaults to the
+   * shared OpenTelemetry tracer.
+   * @param healthChecker - Dependency checked by `/healthz`; defaults to a
+   * checker that always fails when MySQL is not configured.
    */
   constructor(
     controller: LinkController,
     homePage: string,
     ldClient: LDClient,
     logger: Logger = defaultLogger,
-    tracer: TracerLike = defaultTracer
+    tracer: TracerLike = defaultTracer,
+    healthChecker: HealthChecker = {
+      check: () => Promise.reject(new Error("MySQL no configurado")),
+    }
   ) {
     this.controller = controller;
     this.homePage = homePage;
     this.ldClient = ldClient;
     this.logger = logger;
     this.tracer = tracer;
+    this.healthChecker = healthChecker;
   }
 
   /**
@@ -98,6 +108,15 @@ export class Router {
     if (url === "/health" && method === "GET") {
       this.logger.debug("Chequeo de salud solicitado", { uptime: process.uptime() });
       return sendJson(res, 200, { status: "ok", uptime: process.uptime() });
+    }
+
+    if (url === "/healthz" && method === "GET") {
+      try {
+        await this.healthChecker.check();
+        return sendJson(res, 200, { status: "ok" });
+      } catch {
+        return sendJson(res, 503, { status: "error" });
+      }
     }
 
     // LaunchDarkly demo - safe to remove

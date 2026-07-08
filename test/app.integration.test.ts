@@ -13,6 +13,7 @@ async function startApp(t: { after(fn: () => Promise<void> | void): void }) {
       dbPath: ":memory:",
       features: { newCodeGen: false },
       logLevel: "error",
+      mysql: { host: "", database: "", user: "", password: "" },
     },
     HOME
   );
@@ -26,6 +27,7 @@ async function startApp(t: { after(fn: () => Promise<void> | void): void }) {
       (app.server as Server).close((e) => (e ? reject(e) : resolve()))
     );
     app.repository.close();
+    await app.mysqlPool.end();
   });
 
   return { base: `http://127.0.0.1:${port}` };
