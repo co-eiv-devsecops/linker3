@@ -10,6 +10,7 @@ test("createApp sin homePage explícito sirve public/index.html real", async (t)
     dbPath: ":memory:",
     features: { newCodeGen: false },
     logLevel: "error",
+    mysql: { host: "", database: "", user: "", password: "" },
   });
 
   await new Promise<void>((resolve) => app.server.listen(0, resolve));
@@ -21,6 +22,7 @@ test("createApp sin homePage explícito sirve public/index.html real", async (t)
       (app.server as Server).close((e) => (e ? reject(e) : resolve()))
     );
     app.repository.close();
+    await app.mysqlPool.end();
   });
 
   const res = await fetch(`http://127.0.0.1:${port}/`);

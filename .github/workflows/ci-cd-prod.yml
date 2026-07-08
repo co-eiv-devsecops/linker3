@@ -21,7 +21,7 @@ jobs:
     name: Lint y calidad de código
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: lint
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
@@ -56,7 +56,7 @@ jobs:
       - name: Reporte de cobertura (bloquea si < 85%)
         run: npm run test:coverage:check | tee coverage.txt
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: coverage-report-prod-${{ github.sha }}
           path: coverage.txt
@@ -66,7 +66,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: lint
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
@@ -93,7 +93,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test, security-scan]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
@@ -119,7 +119,7 @@ jobs:
       - name: Empaquetar imagen como artefacto
         run: docker save ${{ env.APP_NAME }}:${{ github.sha }} -o ${{ env.APP_NAME }}-${{ github.sha }}.tar
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: linker-prod-${{ github.sha }}
           path: ${{ env.APP_NAME }}-${{ github.sha }}.tar
@@ -129,7 +129,7 @@ jobs:
           mkdir -p deploy-src
           cp -r src public package.json package-lock.json deploy-src/
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: linker-src-prod-${{ github.sha }}
           path: deploy-src/
@@ -145,10 +145,10 @@ jobs:
     env:
       IMAGE: ghcr.io/${{ github.repository }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Login en GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -167,7 +167,7 @@ jobs:
           echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
 
       - name: Build y push de la imagen
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: infra/docker/Dockerfile
@@ -220,7 +220,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: deploy-prod
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Verificar si existe la colección Postman
         id: check
@@ -246,7 +246,7 @@ jobs:
             --reporters cli,junit \
             --reporter-junit-export newman-report.xml
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always() && steps.check.outputs.exists == 'true'
         with:
           name: newman-report-prod-${{ github.sha }}
@@ -275,7 +275,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -291,7 +291,7 @@ jobs:
           fi
 
       - name: Crear GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           make_latest: true

@@ -13,12 +13,13 @@ import { loadConfig } from "./config.ts";
 import { createApp } from "./container.ts";
 
 const config = loadConfig();
-const { server, ldClient, logger } = createApp(config);
+const { server, ldClient, logger, mysqlPool } = createApp(config);
 
 /**
  * Gracefully shuts the process down: closes the LaunchDarkly client
  * (which flushes pending analytics events) first so no telemetry is lost,
- * then stops the HTTP server and shuts down OpenTelemetry.
+ * then stops the HTTP server, closes the MySQL pool, and shuts down
+ * OpenTelemetry.
  */
 async function shutdown(): Promise<void> {
   try {
@@ -27,6 +28,7 @@ async function shutdown(): Promise<void> {
     logger.error("Error cerrando LaunchDarkly", { err: String(err) });
   }
   server.close();
+  await mysqlPool.end();
   await shutdownTelemetry();
 }
 

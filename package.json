@@ -17,9 +17,9 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.2",
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.1.0",
     "husky": "9.1.7",
-    "typescript": "^5.8.0"
+    "typescript": "^6.0.3"
   },
   "dependencies": {
     "@launchdarkly/node-server-sdk": "^9.11.3",
@@ -28,6 +28,7 @@
     "@opentelemetry/exporter-logs-otlp-http": "^0.220.0",
     "@opentelemetry/exporter-metrics-otlp-http": "^0.220.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.220.0",
-    "@opentelemetry/sdk-node": "^0.220.0"
+    "@opentelemetry/sdk-node": "^0.220.0",
+    "mysql2": "^3.22.6"
   }
 }

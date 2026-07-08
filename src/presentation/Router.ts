@@ -1,7 +1,10 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { LDClient } from "@launchdarkly/node-server-sdk";
 import { AppError } from "../domain/errors.ts";
+import type { HealthChecker } from "../domain/HealthChecker.ts";
 import { logger as defaultLogger, type Logger } from "../infrastructure/Logger.ts";
+import { tracer as defaultTracer } from "../infrastructure/telemetry/otel.ts";
+import { type TracerLike, withSpan } from "../infrastructure/telemetry/Tracing.ts";
 import { sendHtml, sendJson } from "./http.ts";
 import type { LinkController } from "./LinkController.ts";
 
@@ -18,6 +21,8 @@ export class Router {
   private readonly homePage: string;
   private readonly logger: Logger;
   private readonly ldClient: LDClient;
+  private readonly tracer: TracerLike;
+  private readonly healthChecker: HealthChecker;
 
   /**
    * @param controller - Controller handling link-related routes.
@@ -25,17 +30,27 @@ export class Router {
    * @param ldClient - Initialized LaunchDarkly client, used by the demo route.
    * @param logger - Logger used to record each request; defaults to the
    * shared console logger.
+   * @param tracer - Tracer used to record the request span; defaults to the
+   * shared OpenTelemetry tracer.
+   * @param healthChecker - Dependency checked by `/healthz`; defaults to a
+   * checker that always fails when MySQL is not configured.
    */
   constructor(
     controller: LinkController,
     homePage: string,
     ldClient: LDClient,
-    logger: Logger = defaultLogger
+    logger: Logger = defaultLogger,
+    tracer: TracerLike = defaultTracer,
+    healthChecker: HealthChecker = {
+      check: () => Promise.reject(new Error("MySQL no configurado")),
+    }
   ) {
     this.controller = controller;
     this.homePage = homePage;
     this.ldClient = ldClient;
     this.logger = logger;
+    this.tracer = tracer;
+    this.healthChecker = healthChecker;
   }
 
   /**
@@ -49,23 +64,30 @@ export class Router {
    * @param res - Response to write to.
    */
   async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const start = Date.now();
     const { method = "GET", url = "/" } = req;
 
-    try {
-      await this.dispatch(req, res);
-      this.logger.info(`${method} ${url}`, { ms: Date.now() - start });
-    } catch (e) {
-      const ms = Date.now() - start;
-      if (e instanceof AppError) {
-        sendJson(res, e.status, { error: e.message });
-        this.logger.warn(`${method} ${url}`, { status: e.status, error: e.message, ms });
-      } else {
-        sendJson(res, 500, { error: "Error interno" });
-        const error = e instanceof Error ? (e.stack ?? e.message) : String(e);
-        this.logger.error(`${method} ${url}`, { status: 500, error, ms });
+    await withSpan(this.tracer, "request", { method, url }, async () => {
+      const start = Date.now();
+
+      try {
+        await this.dispatch(req, res);
+        this.logger.info(`${method} ${url}`, { ms: Date.now() - start });
+      } catch (e) {
+        const ms = Date.now() - start;
+        if (e instanceof AppError) {
+          sendJson(res, e.status, { error: e.message });
+          this.logger.warn(`${method} ${url}`, {
+            status: e.status,
+            error: e.message,
+            ms,
+          });
+        } else {
+          sendJson(res, 500, { error: "Error interno" });
+          const error = e instanceof Error ? (e.stack ?? e.message) : String(e);
+          this.logger.error(`${method} ${url}`, { status: 500, error, ms });
+        }
       }
-    }
+    });
   }
 
   /**
@@ -86,6 +108,15 @@ export class Router {
     if (url === "/health" && method === "GET") {
       this.logger.debug("Chequeo de salud solicitado", { uptime: process.uptime() });
       return sendJson(res, 200, { status: "ok", uptime: process.uptime() });
+    }
+
+    if (url === "/healthz" && method === "GET") {
+      try {
+        await this.healthChecker.check();
+        return sendJson(res, 200, { status: "ok" });
+      } catch {
+        return sendJson(res, 503, { status: "error" });
+      }
     }
 
     // LaunchDarkly demo - safe to remove
