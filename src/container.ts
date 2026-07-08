@@ -3,10 +3,12 @@ import { createServer, type Server } from "node:http";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { init, type LDClient } from "@launchdarkly/node-server-sdk";
+import { createPool, type Pool } from "mysql2/promise";
 import { LinkService } from "./application/LinkService.ts";
 import { LinkValidator } from "./application/LinkValidator.ts";
 import type { AppConfig } from "./config.ts";
 import { createLogger, type Logger } from "./infrastructure/Logger.ts";
+import { MySqlHealthChecker } from "./infrastructure/MySqlHealthChecker.ts";
 import { RandomCodeGenerator } from "./infrastructure/RandomCodeGenerator.ts";
 import { SecureCodeGenerator } from "./infrastructure/SecureCodeGenerator.ts";
 import { SqliteLinkRepository } from "./infrastructure/SqliteLinkRepository.ts";
@@ -27,6 +29,8 @@ export interface App {
   ldClient: LDClient;
   /** The level-aware {@link Logger} instance used by the app, per `config.logLevel`. */
   logger: Logger;
+  /** The MySQL connection pool backing the `/healthz` check. */
+  mysqlPool: Pool;
 }
 
 /**
@@ -60,11 +64,20 @@ export function createApp(config: AppConfig, homePage?: string): App {
   const controller = new LinkController(service, config.baseUrl);
   const sdkKey = process.env.LAUNCHDARKLY_SDK_KEY;
   const ldClient = init(sdkKey ?? "", sdkKey ? undefined : { offline: true });
-  const router = new Router(controller, ui, ldClient, logger);
+  const mysqlPool = createPool({
+    host: config.mysql.host,
+    database: config.mysql.database,
+    user: config.mysql.user,
+    password: config.mysql.password,
+    // Fail fast so /healthz never hangs on the OS-level TCP timeout.
+    connectTimeout: 5000,
+  });
+  const healthChecker = new MySqlHealthChecker(mysqlPool, logger);
+  const router = new Router(controller, ui, ldClient, logger, undefined, healthChecker);
 
   const server = createServer((req, res) => {
     void router.handle(req, res);
   });
 
-  return { server, repository, ldClient, logger };
+  return { server, repository, ldClient, logger, mysqlPool };
 }
