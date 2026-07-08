@@ -113,7 +113,7 @@ hacer `git push` — no hay forma de saltarse esto por accidente.
 
 ## 6. Commits
 
-Usamos [Conventional Commits](https://www.conventionalcommits.org/es/):
+Usamos [Conventional Commits](https://3.n-la-c.app/conventional-commits):
 
 ```
 feat(api): agregar endpoint de estadísticas
@@ -144,7 +144,7 @@ cambio no es obvio.
 
 Usa los formularios de issue (bug, funcionalidad, tarea técnica). Para
 dudas de uso sin definir aún, abre una
-[discusión](https://github.com/co-eiv-devsecops/linker3/discussions) en
+[discusión](https://3.n-la-c.app/gh-discussions) en
 vez de un issue. Para vulnerabilidades de seguridad **no abras un issue
 público**: sigue [SECURITY.md](SECURITY.md).
 

@@ -30,7 +30,7 @@ Closes #<!-- número de issue, si aplica -->
 - [ ] Actualicé la documentación afectada (README, CLAUDE.md, comentarios)
 - [ ] Si edité `cloud-init.yaml` o `provision.sh`, sincronicé el otro archivo
 - [ ] No incluyo secretos, credenciales ni archivos generados (`linker.db`, `node_modules`)
-- [ ] El título del PR y los commits siguen [Conventional Commits](https://www.conventionalcommits.org/es/) (`feat:`, `fix:`, `chore:`…)
+- [ ] El título del PR y los commits siguen [Conventional Commits](https://3.n-la-c.app/conventional-commits) (`feat:`, `fix:`, `chore:`…)
 - [ ] El PR apunta a `develop` (solo los releases van a `main`)
 
 ## Notas para quien revisa

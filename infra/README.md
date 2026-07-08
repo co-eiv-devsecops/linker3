@@ -32,7 +32,7 @@ ese mismo perfil de `~/.oci/config`.
 ## Requisitos
 
 - Docker Desktop corriendo
-- [Terraform](https://developer.hashicorp.com/terraform/install) >= 1.5
+- [Terraform](https://3.n-la-c.app/terraform-install) >= 1.5
 
 ## Uso
 
