@@ -96,29 +96,37 @@ export class LinkService {
    * @throws {ConflictError} If the requested alias is already taken.
    */
   shorten(request: ShortenRequest): ShortenResult {
-    const start = performance.now();
-    this.validator.assertValidUrl(request.url);
+    return withSpan(
+      this.tracer,
+      "link.shorten",
+      { url: request.url, has_alias: this.validator.hasAlias(request.alias) },
+      (span) => {
+        const start = performance.now();
+        this.validator.assertValidUrl(request.url);
 
-    const useAlias = this.validator.hasAlias(request.alias);
-    if (useAlias) {
-      this.validator.assertValidAlias(request.alias);
-    }
+        const useAlias = this.validator.hasAlias(request.alias);
+        if (useAlias) {
+          this.validator.assertValidAlias(request.alias);
+        }
 
-    const code = useAlias ? (request.alias as string) : this.codeGenerator.generate();
+        const code = useAlias ? (request.alias as string) : this.codeGenerator.generate();
+        span.setAttribute("code", code);
 
-    if (useAlias && this.repository.findByCode(code)) {
-      throw new ConflictError("El alias ya está en uso");
-    }
+        if (useAlias && this.repository.findByCode(code)) {
+          throw new ConflictError("El alias ya está en uso");
+        }
 
-    this.repository.save(code, request.url);
-    this.logger.info("Enlace creado", { code, url: request.url, alias: useAlias });
+        this.repository.save(code, request.url);
+        this.logger.info("Enlace creado", { code, url: request.url, alias: useAlias });
 
-    this.linksCreatedTotal.add(1);
-    this.activeLinksCount += 1;
-    this.activeLinks.record(this.activeLinksCount);
-    this.shortenDurationMs.record(performance.now() - start);
+        this.linksCreatedTotal.add(1);
+        this.activeLinksCount += 1;
+        this.activeLinks.record(this.activeLinksCount);
+        this.shortenDurationMs.record(performance.now() - start);
 
-    return { code };
+        return { code };
+      }
+    );
   }
 
   /**
@@ -133,15 +141,16 @@ export class LinkService {
     this.inFlightRedirectsCount += 1;
     this.inFlightRedirects.record(this.inFlightRedirectsCount);
     try {
-      return withSpan(this.tracer, "lookup", { code }, (lookupSpan) => {
+      return withSpan(this.tracer, "link.resolve", { code }, (resolveSpan) => {
         const link = this.repository.findByCode(code);
+        resolveSpan.setAttribute("found", link !== null);
         if (!link) {
           throw new NotFoundError("No encontrado");
         }
 
-        lookupSpan.setAttribute("url", link.url);
+        resolveSpan.setAttribute("url", link.url);
 
-        withSpan(this.tracer, "increment visits", { code, url: link.url }, () => {
+        withSpan(this.tracer, "link.visit.increment", { code, url: link.url }, () => {
           this.repository.incrementVisits(code);
         });
 
@@ -164,8 +173,11 @@ export class LinkService {
    * @returns All links, newest first.
    */
   list(): Link[] {
-    const links = this.repository.findAll();
-    this.logger.debug("Enlaces listados", { count: links.length });
-    return links;
+    return withSpan(this.tracer, "link.list", {}, (span) => {
+      const links = this.repository.findAll();
+      span.setAttribute("count", links.length);
+      this.logger.debug("Enlaces listados", { count: links.length });
+      return links;
+    });
   }
 }

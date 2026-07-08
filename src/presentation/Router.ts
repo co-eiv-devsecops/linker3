@@ -30,7 +30,7 @@ export class Router {
    * @param ldClient - Initialized LaunchDarkly client, used by the demo route.
    * @param logger - Logger used to record each request; defaults to the
    * shared console logger.
-   * @param tracer - Tracer used to record the request span; defaults to the
+   * @param tracer - Tracer used to record the `http.request` span; defaults to the
    * shared OpenTelemetry tracer.
    * @param healthChecker - Dependency checked by `/healthz`; defaults to a
    * checker that always fails when MySQL is not configured.
@@ -66,28 +66,38 @@ export class Router {
   async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const { method = "GET", url = "/" } = req;
 
-    await withSpan(this.tracer, "request", { method, url }, async () => {
-      const start = Date.now();
+    await withSpan(
+      this.tracer,
+      "http.request",
+      { "http.method": method, "http.target": url },
+      async (span) => {
+        const start = Date.now();
 
-      try {
-        await this.dispatch(req, res);
-        this.logger.info(`${method} ${url}`, { ms: Date.now() - start });
-      } catch (e) {
-        const ms = Date.now() - start;
-        if (e instanceof AppError) {
-          sendJson(res, e.status, { error: e.message });
-          this.logger.warn(`${method} ${url}`, {
-            status: e.status,
-            error: e.message,
-            ms,
-          });
-        } else {
-          sendJson(res, 500, { error: "Error interno" });
-          const error = e instanceof Error ? (e.stack ?? e.message) : String(e);
-          this.logger.error(`${method} ${url}`, { status: 500, error, ms });
+        try {
+          await this.dispatch(req, res);
+          span.setAttribute("http.status_code", res.statusCode);
+          this.logger.info(`${method} ${url}`, { ms: Date.now() - start });
+        } catch (e) {
+          const ms = Date.now() - start;
+          if (e instanceof AppError) {
+            span.setAttribute("http.status_code", e.status);
+            span.setAttribute("error.type", e.constructor.name);
+            sendJson(res, e.status, { error: e.message });
+            this.logger.warn(`${method} ${url}`, {
+              status: e.status,
+              error: e.message,
+              ms,
+            });
+          } else {
+            span.setAttribute("http.status_code", 500);
+            span.setAttribute("error.type", "UnexpectedError");
+            sendJson(res, 500, { error: "Error interno" });
+            const error = e instanceof Error ? (e.stack ?? e.message) : String(e);
+            this.logger.error(`${method} ${url}`, { status: 500, error, ms });
+          }
         }
       }
-    });
+    );
   }
 
   /**
