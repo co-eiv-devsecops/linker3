@@ -1,0 +1,8 @@
+title = "Linker gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Ignore documented placeholder values in the environment example file"
+paths = ['''(^|/)\.env\.example$''']
