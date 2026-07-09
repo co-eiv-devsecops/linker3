@@ -50,12 +50,13 @@ jobs:
       - name: Bloquear si hay hallazgos de severidad alta o crítica
         run: |
           set -euo pipefail
-          SARIF_FILE="sarif-results/${{ matrix.language }}.sarif"
+          SARIF_FILE=$(find sarif-results -name '*.sarif' -print -quit)
 
-          if [ ! -f "$SARIF_FILE" ]; then
-            echo "::error::No se encontró el archivo SARIF esperado en $SARIF_FILE"
+          if [ -z "$SARIF_FILE" ] || [ ! -f "$SARIF_FILE" ]; then
+            echo "::error::No se encontró ningún archivo .sarif dentro de sarif-results/"
             exit 1
           fi
+          echo "Analizando $SARIF_FILE"
 
           HIGH_CRITICAL=$(jq '
             [.runs[] as $run
