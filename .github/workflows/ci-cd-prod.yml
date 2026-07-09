@@ -61,10 +61,19 @@ jobs:
           name: coverage-report-prod-${{ github.sha }}
           path: coverage.txt
 
+  codeql:
+    name: Análisis SAST (CodeQL)
+    needs: lint
+    uses: ./.github/workflows/codeql.yml
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+
   security-scan:
     name: Escaneo de seguridad
     runs-on: ubuntu-latest
-    needs: lint
+    needs: [lint, codeql]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -92,12 +101,12 @@ jobs:
       - name: Escaneo de secretos (gitleaks)
         run: gitleaks detect --source . --config .gitleaks.toml --verbose --redact --exit-code 1
 
-      - name: Análisis SAST (pendiente CodeQL)
-        run: echo "Pendiente implementar CodeQL"
+      - name: Confirmar resultado del análisis SAST (CodeQL)
+        run: echo "Resultado CodeQL (job 'codeql') = ${{ needs.codeql.result }}"
 
       - name: Validar cumplimiento (gate bloqueante)
         run: |
-          echo 'Pendiente: en prod cualquier hallazgo critico detiene el pipeline'
+          echo "El job 'codeql' ya bloquea el pipeline si hay hallazgos de severidad alta o crítica (needs: codeql)."
 
   build:
     name: Build y empaquetado

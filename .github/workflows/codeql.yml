@@ -1,0 +1,65 @@
+name: CodeQL
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  schedule:
+    # Escaneo periódico independiente de los pushes/PRs (lunes 06:00 UTC)
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Análisis CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Inicializar CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-and-quality
+
+      - name: Ejecutar análisis CodeQL
+        id: analyze
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+          output: sarif-results
+          upload: true
+
+      - name: Bloquear si hay hallazgos de severidad alta o crítica
+        run: |
+          set -euo pipefail
+          SARIF_FILE="sarif-results/${{ matrix.language }}.sarif"
+
+          if [ ! -f "$SARIF_FILE" ]; then
+            echo "::error::No se encontró el archivo SARIF esperado en $SARIF_FILE"
+            exit 1
+          fi
+
+          HIGH_CRITICAL=$(jq '
+            [.runs[] as $run
+              | $run.results[]? as $result
+              | ($run.tool.driver.rules[$result.ruleIndex].properties["security-severity"] // "0") as $sev
+              | select(($sev | tonumber) >= 7.0)
+            ] | length
+          ' "$SARIF_FILE")
+
+          echo "Hallazgos de severidad alta/crítica (security-severity >= 7.0): $HIGH_CRITICAL"
+
+          if [ "$HIGH_CRITICAL" -gt 0 ]; then
+            echo "::error::CodeQL encontró $HIGH_CRITICAL hallazgo(s) de severidad alta o crítica. Revisa la pestaña Security del repositorio."
+            exit 1
+          fi
