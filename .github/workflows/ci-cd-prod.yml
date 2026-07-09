@@ -90,7 +90,7 @@ jobs:
           gitleaks version
 
       - name: Escaneo de secretos (gitleaks)
-        run: gitleaks detect --source . --verbose --redact --exit-code 1
+        run: gitleaks detect --source . --config .gitleaks.toml --verbose --redact --exit-code 1
 
       - name: Análisis SAST (pendiente CodeQL)
         run: echo "Pendiente implementar CodeQL"
