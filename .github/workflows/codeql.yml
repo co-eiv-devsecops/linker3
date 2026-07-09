@@ -16,7 +16,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
       actions: read
     strategy:
       fail-fast: false
@@ -37,7 +36,16 @@ jobs:
         with:
           category: "/language:${{ matrix.language }}"
           output: sarif-results
-          upload: true
+          # GitHub Advanced Security no está habilitado en este repo privado
+          # (la subida a la pestaña Security devuelve 403 "Code Security must
+          # be enabled"), así que el resultado se simula: no se sube y en su
+          # lugar queda disponible como artefacto descargable del run.
+          upload: false
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: codeql-sarif-${{ matrix.language }}-${{ github.sha }}
+          path: sarif-results/
 
       - name: Bloquear si hay hallazgos de severidad alta o crítica
         run: |
@@ -60,6 +68,6 @@ jobs:
           echo "Hallazgos de severidad alta/crítica (security-severity >= 7.0): $HIGH_CRITICAL"
 
           if [ "$HIGH_CRITICAL" -gt 0 ]; then
-            echo "::error::CodeQL encontró $HIGH_CRITICAL hallazgo(s) de severidad alta o crítica. Revisa la pestaña Security del repositorio."
+            echo "::error::CodeQL encontró $HIGH_CRITICAL hallazgo(s) de severidad alta o crítica. Revisa el artefacto SARIF del run."
             exit 1
           fi
