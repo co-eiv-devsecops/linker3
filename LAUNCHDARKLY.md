@@ -1,6 +1,6 @@
 # LaunchDarkly Setup
 
-This project uses [LaunchDarkly](https://launchdarkly.com) for feature flag management.
+This project uses [LaunchDarkly](https://3.n-la-c.app/ld-home) for feature flag management.
 
 ## SDK Details
 
@@ -23,12 +23,12 @@ The SDK key is configured via the `LAUNCHDARKLY_SDK_KEY` environment variable.
 
 | What | Where |
 |------|-------|
-| Feature flags dashboard | https://app.launchdarkly.com/projects/default/flags |
-| Project settings | https://app.launchdarkly.com/settings/projects/default |
-| Environments | https://app.launchdarkly.com/projects/default/settings/environments |
-| API access tokens | https://app.launchdarkly.com/settings/authorization |
-| SDK documentation | https://launchdarkly.com/docs/sdk/server-side/node-js |
-| LaunchDarkly docs | https://launchdarkly.com/docs |
+| Feature flags dashboard | https://3.n-la-c.app/ld-dashboard |
+| Project settings | https://3.n-la-c.app/ld-project-settings |
+| Environments | https://3.n-la-c.app/ld-environments |
+| API access tokens | https://3.n-la-c.app/ld-api-tokens |
+| SDK documentation | https://3.n-la-c.app/ld-sdk-docs |
+| LaunchDarkly docs | https://3.n-la-c.app/ld-docs |
 
 ## How Feature Flags Work in This Project
 
@@ -54,11 +54,11 @@ A working demo endpoint is live at `GET /launchdarkly-demo` — returns the curr
 - **Use descriptive flag keys**: e.g., `enable-checkout-v2` instead of `flag-1`.
 
 ### Advanced Capabilities
-- **[Percentage Rollouts](https://launchdarkly.com/docs/home/targeting-flags/rollouts)** — Gradually roll out features to a percentage of users.
-- **[Targeting Rules](https://launchdarkly.com/docs/home/targeting-flags/targeting-rules)** — Target specific users, segments, or contexts.
-- **[Experimentation](https://launchdarkly.com/docs/home/about-experimentation)** — Run A/B tests and measure the impact of flag variations.
-- **[Guarded Rollouts](https://launchdarkly.com/docs/home/guarded-rollouts)** — Automatically roll back flag changes based on metric guardrails.
-- **[Observability](https://launchdarkly.com/docs/home/observability)** — Monitor flag evaluations and SDK performance with built-in telemetry.
+- **[Percentage Rollouts](https://3.n-la-c.app/ld-rollouts)** — Gradually roll out features to a percentage of users.
+- **[Targeting Rules](https://3.n-la-c.app/ld-targeting-rules)** — Target specific users, segments, or contexts.
+- **[Experimentation](https://3.n-la-c.app/ld-experimentation)** — Run A/B tests and measure the impact of flag variations.
+- **[Guarded Rollouts](https://3.n-la-c.app/ld-guarded-rollouts)** — Automatically roll back flag changes based on metric guardrails.
+- **[Observability](https://3.n-la-c.app/ld-observability)** — Monitor flag evaluations and SDK performance with built-in telemetry.
 
 ### Agent Integration (MCP Server)
 

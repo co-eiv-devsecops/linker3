@@ -22,7 +22,7 @@ duplicada aquí.
 
 ## Requisitos
 
-- [Terraform](https://developer.hashicorp.com/terraform/install) >= 1.5
+- [Terraform](https://3.n-la-c.app/terraform-install) >= 1.5
 - `oci` CLI ya configurado (`oci setup config`) — Terraform reutiliza ese
   mismo perfil de `~/.oci/config`, no hace falta ingresar credenciales aparte
 - Compartment y subnet ya creados (los provee el instructor/consola de OCI)

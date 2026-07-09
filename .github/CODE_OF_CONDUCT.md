@@ -65,6 +65,6 @@ revisadas e investigadas de manera pronta y justa.
 
 Este Código de conducta está adaptado del [Contributor Covenant][homepage],
 versión 2.1, disponible en
-https://www.contributor-covenant.org/es/version/2/1/code_of_conduct.html.
+https://3.n-la-c.app/contributor-covenant.
 
-[homepage]: https://www.contributor-covenant.org
+[homepage]: https://3.n-la-c.app/contributor-covenant-home
