@@ -60,9 +60,13 @@ jobs:
 
           HIGH_CRITICAL=$(jq '
             [.runs[] as $run
+              | ($run.tool.driver.rules // []) as $rules
               | $run.results[]? as $result
-              | ($run.tool.driver.rules[$result.ruleIndex].properties["security-severity"] // "0") as $sev
-              | select(($sev | tonumber) >= 7.0)
+              | ($result.ruleIndex // -1) as $idx
+              | (if $idx >= 0 and $idx < ($rules | length)
+                 then ($rules[$idx].properties["security-severity"] // "0")
+                 else "0" end) as $sev
+              | select(($sev | tonumber? // 0) >= 7.0)
             ] | length
           ' "$SARIF_FILE")
 
