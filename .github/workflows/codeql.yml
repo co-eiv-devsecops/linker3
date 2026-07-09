@@ -1,0 +1,78 @@
+name: CodeQL
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  schedule:
+    # Escaneo periódico independiente de los pushes/PRs (lunes 06:00 UTC)
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Análisis CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Inicializar CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-and-quality
+
+      - name: Ejecutar análisis CodeQL
+        id: analyze
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+          output: sarif-results
+          # GitHub Advanced Security no está habilitado en este repo privado
+          # (la subida a la pestaña Security devuelve 403 "Code Security must
+          # be enabled"), así que el resultado se simula: no se sube y en su
+          # lugar queda disponible como artefacto descargable del run.
+          upload: false
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: codeql-sarif-${{ matrix.language }}-${{ github.sha }}
+          path: sarif-results/
+
+      - name: Bloquear si hay hallazgos de severidad alta o crítica
+        run: |
+          set -euo pipefail
+          SARIF_FILE=$(find sarif-results -name '*.sarif' -print -quit)
+
+          if [ -z "$SARIF_FILE" ] || [ ! -f "$SARIF_FILE" ]; then
+            echo "::error::No se encontró ningún archivo .sarif dentro de sarif-results/"
+            exit 1
+          fi
+          echo "Analizando $SARIF_FILE"
+
+          HIGH_CRITICAL=$(jq '
+            [.runs[] as $run
+              | ($run.tool.driver.rules // []) as $rules
+              | $run.results[]? as $result
+              | ($result.ruleIndex // -1) as $idx
+              | (if $idx >= 0 and $idx < ($rules | length)
+                 then ($rules[$idx].properties["security-severity"] // "0")
+                 else "0" end) as $sev
+              | select(($sev | tonumber? // 0) >= 7.0)
+            ] | length
+          ' "$SARIF_FILE")
+
+          echo "Hallazgos de severidad alta/crítica (security-severity >= 7.0): $HIGH_CRITICAL"
+
+          if [ "$HIGH_CRITICAL" -gt 0 ]; then
+            echo "::error::CodeQL encontró $HIGH_CRITICAL hallazgo(s) de severidad alta o crítica. Revisa el artefacto SARIF del run."
+            exit 1
+          fi

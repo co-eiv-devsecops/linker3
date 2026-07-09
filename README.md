@@ -6,7 +6,7 @@ Acortador de URLs en Node.js con SQLite integrado y arquitectura por capas.
 
 Producción: <https://3.n-la-c.app>
 
-Repositorio: <https://github.com/co-eiv-devsecops/linker3>
+Repositorio: <https://3.n-la-c.app/gh-linker3>
 
 ## Integrantes
 

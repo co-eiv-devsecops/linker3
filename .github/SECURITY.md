@@ -16,8 +16,8 @@ seguridad.
 
 Si no tienes acceso a esa función (por ejemplo, cuenta de GitHub muy nueva),
 contacta directamente por GitHub a
-[@CARDAV-45](https://github.com/CARDAV-45) o
-[@diegcard](https://github.com/diegcard), mantenedores del repositorio.
+[@CARDAV-45](https://3.n-la-c.app/gh-cardav45) o
+[@diegcard](https://3.n-la-c.app/gh-diegcard), mantenedores del repositorio.
 
 Nos comprometemos a acusar recibo en un plazo razonable y a coordinar la
 divulgación una vez corregida.
