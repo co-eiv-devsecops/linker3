@@ -105,6 +105,30 @@ test("GET / responde la página principal como HTML", async (t) => {
   assert.equal(res.body, "<h1>hola</h1>");
 });
 
+test("todas las respuestas incluyen cabeceras de seguridad", async (t) => {
+  const { router } = makeRouter(t, "<h1>hola</h1>");
+  const res = new FakeResponse();
+
+  await router.handle(asReq("GET", "/"), asRes(res));
+
+  assert.match(res.headers["Content-Security-Policy"] ?? "", /default-src 'self'/);
+  assert.equal(res.headers["X-Content-Type-Options"], "nosniff");
+  assert.equal(res.headers["X-Frame-Options"], "DENY");
+  assert.equal(res.headers["Referrer-Policy"], "strict-origin-when-cross-origin");
+});
+
+test("la redirección por código incluye cabeceras de seguridad", async (t) => {
+  const { repo, router } = makeRouter(t);
+  repo.save("abc123", "https://www.wikipedia.org");
+  const res = new FakeResponse();
+
+  await router.handle(asReq("GET", "/abc123"), asRes(res));
+
+  assert.equal(res.status, 302);
+  assert.equal(res.headers["X-Content-Type-Options"], "nosniff");
+  assert.equal(res.headers["X-Frame-Options"], "DENY");
+});
+
 test("GET /launchdarkly-demo responde el estado del flag", async (t) => {
   const { router } = makeRouter(t);
   const res = new FakeResponse();
