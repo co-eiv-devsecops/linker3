@@ -224,6 +224,30 @@ test("GET /healthz sin healthChecker configurado responde 503", async (t) => {
   assert.deepEqual(JSON.parse(res.body), { status: "error" });
 });
 
+test("GET /openapi.json responde la especificación OpenAPI", async (t) => {
+  const { router } = makeRouter(t);
+  const res = new FakeResponse();
+
+  await router.handle(asReq("GET", "/openapi.json"), asRes(res));
+
+  assert.equal(res.status, 200);
+  const body = JSON.parse(res.body);
+  assert.equal(body.openapi, "3.0.3");
+  assert.ok(body.paths["/api/shorten"]);
+});
+
+test("GET /docs responde la UI de Swagger con CSP ampliada para el CDN", async (t) => {
+  const { router } = makeRouter(t);
+  const res = new FakeResponse();
+
+  await router.handle(asReq("GET", "/docs"), asRes(res));
+
+  assert.equal(res.status, 200);
+  assert.equal(res.headers["Content-Type"], "text/html");
+  assert.match(res.body, /SwaggerUIBundle/);
+  assert.match(res.headers["Content-Security-Policy"] ?? "", /cdn\.jsdelivr\.net/);
+});
+
 test("GET /api/links delega en controller.list", async (t) => {
   const { repo, router } = makeRouter(t);
   repo.save("abc", "https://www.wikipedia.org");
