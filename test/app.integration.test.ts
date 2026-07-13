@@ -79,6 +79,46 @@ test("POST /api/shorten responde 400 con URL inválida", async (t) => {
   assert.deepEqual(await res.json(), { error: "URL inválida" });
 });
 
+test("POST /api/shorten rechaza esquemas peligrosos (javascript:, data:, ftp:)", async (t) => {
+  const { base } = await startApp(t);
+
+  for (const url of [
+    "javascript:alert(1)",
+    "data:text/html,<script>alert(1)</script>",
+    "ftp://ftp.example.com/file",
+  ]) {
+    const res = await fetch(`${base}/api/shorten`, {
+      method: "POST",
+      body: JSON.stringify({ url }),
+    });
+    assert.equal(res.status, 400, `debería rechazar ${url}`);
+    assert.deepEqual(await res.json(), { error: "URL inválida" });
+  }
+});
+
+test("POST /api/shorten rechaza una URL que excede la longitud máxima", async (t) => {
+  const { base } = await startApp(t);
+  const url = `https://example.com/${"a".repeat(3000)}`;
+
+  const res = await fetch(`${base}/api/shorten`, {
+    method: "POST",
+    body: JSON.stringify({ url }),
+  });
+
+  assert.equal(res.status, 400);
+  const body = (await res.json()) as { error: string };
+  assert.match(body.error, /demasiado larga/);
+});
+
+test("las respuestas HTTP reales incluyen cabeceras de seguridad", async (t) => {
+  const { base } = await startApp(t);
+  const res = await fetch(`${base}/`);
+
+  assert.equal(res.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(res.headers.get("x-frame-options"), "DENY");
+  assert.match(res.headers.get("content-security-policy") ?? "", /default-src 'self'/);
+});
+
 test("POST /api/shorten responde 400 con JSON malformado", async (t) => {
   const { base } = await startApp(t);
   const res = await fetch(`${base}/api/shorten`, {

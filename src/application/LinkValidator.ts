@@ -15,14 +15,27 @@ export class LinkValidator {
   static readonly ALIAS_REGEX = /^[a-zA-Z0-9_-]{3,30}$/;
 
   /**
-   * Asserts that `url` is a non-empty string matching {@link URL_REGEX}.
+   * Maximum accepted `url` length, in line with the practical limit
+   * supported by common browsers/servers. Prevents unbounded input from
+   * bloating storage and responses.
+   */
+  static readonly MAX_URL_LENGTH = 2048;
+
+  /**
+   * Asserts that `url` is a non-empty string matching {@link URL_REGEX}
+   * and no longer than {@link MAX_URL_LENGTH}.
    *
    * @param url - Value to validate.
-   * @throws {ValidationError} If `url` is not a valid `http(s)` URL.
+   * @throws {ValidationError} If `url` is not a valid `http(s)` URL, or exceeds the length limit.
    */
   assertValidUrl(url: unknown): asserts url is string {
     if (typeof url !== "string" || !LinkValidator.URL_REGEX.test(url)) {
       throw new ValidationError("URL inválida");
+    }
+    if (url.length > LinkValidator.MAX_URL_LENGTH) {
+      throw new ValidationError(
+        `URL demasiado larga: máximo ${LinkValidator.MAX_URL_LENGTH} caracteres`
+      );
     }
   }
 

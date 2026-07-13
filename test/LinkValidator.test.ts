@@ -25,6 +25,18 @@ test("assertValidUrl rechaza URLs inválidas con ValidationError", () => {
   }
 });
 
+test("assertValidUrl rechaza URLs que exceden MAX_URL_LENGTH", () => {
+  const tooLong = `http://example.com/${"a".repeat(LinkValidator.MAX_URL_LENGTH)}`;
+  assert.throws(() => validator.assertValidUrl(tooLong), ValidationError);
+});
+
+test("assertValidUrl acepta una URL justo en el límite de MAX_URL_LENGTH", () => {
+  const path = "a".repeat(LinkValidator.MAX_URL_LENGTH - "http://x.co/".length);
+  const atLimit = `http://x.co/${path}`;
+  assert.equal(atLimit.length, LinkValidator.MAX_URL_LENGTH);
+  assert.doesNotThrow(() => validator.assertValidUrl(atLimit));
+});
+
 test("assertValidAlias acepta alias válidos", () => {
   for (const ok of ["abc", "mi-alias_1", "A".repeat(30)]) {
     assert.doesNotThrow(() => validator.assertValidAlias(ok));
