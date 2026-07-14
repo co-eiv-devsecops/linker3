@@ -78,6 +78,24 @@ export function sendNoContent(res: ServerResponse): void {
 }
 
 /**
+ * Writes a header-only response with no body, for routes (like `HEAD`
+ * requests) where the HTTP spec forbids a response body.
+ *
+ * @param res - Response to write to.
+ * @param status - HTTP status code.
+ * @param extraHeaders - Additional headers merged in on top of the
+ * defaults (e.g. `Location` to carry a short link's destination).
+ */
+export function sendHead(
+  res: ServerResponse,
+  status: number,
+  extraHeaders: Record<string, string> = {}
+): void {
+  res.writeHead(status, { ...SECURITY_HEADERS, ...extraHeaders });
+  res.end();
+}
+
+/**
  * Reads and parses a request body as JSON.
  *
  * @param req - Incoming request whose body will be consumed.
