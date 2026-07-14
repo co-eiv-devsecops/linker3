@@ -1,10 +1,10 @@
-import type { IncomingMessage, ServerResponse } from "node:http";
 import type { LDClient } from "@launchdarkly/node-server-sdk";
 import { AppError } from "../domain/errors.ts";
 import type { HealthChecker } from "../domain/HealthChecker.ts";
 import { logger as defaultLogger, type Logger } from "../infrastructure/Logger.ts";
 import { tracer as defaultTracer } from "../infrastructure/telemetry/otel.ts";
 import { type TracerLike, withSpan } from "../infrastructure/telemetry/Tracing.ts";
+import type { HttpHandler, HttpRequest, HttpResponse } from "./HttpPort.ts";
 import { sendHtml, sendJson } from "./http.ts";
 import type { LinkController } from "./LinkController.ts";
 import { openApiSpec } from "./openapiSpec.ts";
@@ -42,7 +42,7 @@ const SWAGGER_UI_HTML = `<!doctype html>
  * converting thrown {@link AppError}s (and unexpected errors) into JSON
  * error responses. Every request is logged on completion.
  */
-export class Router {
+export class Router implements HttpHandler {
   private readonly controller: LinkController;
   private readonly homePage: string;
   private readonly logger: Logger;
@@ -89,7 +89,7 @@ export class Router {
    * @param req - Incoming request.
    * @param res - Response to write to.
    */
-  async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  async handle(req: HttpRequest, res: HttpResponse): Promise<void> {
     const { method = "GET", url = "/" } = req;
 
     await withSpan(
@@ -134,7 +134,7 @@ export class Router {
    * @param req - Incoming request.
    * @param res - Response to write to.
    */
-  private async dispatch(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  private async dispatch(req: HttpRequest, res: HttpResponse): Promise<void> {
     const { method = "GET", url = "/" } = req;
 
     if (url === "/" || url === "/index.html") {

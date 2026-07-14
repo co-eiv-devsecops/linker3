@@ -243,6 +243,26 @@ bash infra/scripts/deploy.sh
 
 ## Infraestructura y paridad de entornos
 
+### Artefacto común para Node, AWS Lambda y Azure Functions
+
+La capa HTTP usa los contratos neutrales de `src/presentation/HttpPort.ts`.
+El servidor tradicional se expone mediante `NodeHttpAdapter`; los entrypoints
+serverless son `src/serverless/aws.ts` y `src/serverless/azure.ts`. Los tres
+ejecutan el mismo `Router`, `LinkController` y `LinkService`.
+
+```bash
+npm run build
+```
+
+El directorio `dist/` resultante es el artefacto común. Configure
+`dist/serverless/aws.handler` en Lambda. En Azure Functions, registre `handler`
+desde `dist/serverless/azure.js` en el trigger HTTP. El proceso Node usa
+`dist/main.js` (o `npm start` durante desarrollo).
+
+Los adaptadores no requieren SDKs de proveedor y reutilizan las dependencias en
+invocaciones calientes. En serverless, SQLite solo es apropiado para datos
+efímeros; la persistencia entre instancias requiere un repositorio externo.
+
 Ver infra/README.md para detalles de Terraform y Docker.
 
 ## DevContainer
