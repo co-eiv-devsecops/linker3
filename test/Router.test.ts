@@ -105,6 +105,30 @@ test("GET / responde la página principal como HTML", async (t) => {
   assert.equal(res.body, "<h1>hola</h1>");
 });
 
+test("todas las respuestas incluyen cabeceras de seguridad", async (t) => {
+  const { router } = makeRouter(t, "<h1>hola</h1>");
+  const res = new FakeResponse();
+
+  await router.handle(asReq("GET", "/"), asRes(res));
+
+  assert.match(res.headers["Content-Security-Policy"] ?? "", /default-src 'self'/);
+  assert.equal(res.headers["X-Content-Type-Options"], "nosniff");
+  assert.equal(res.headers["X-Frame-Options"], "DENY");
+  assert.equal(res.headers["Referrer-Policy"], "strict-origin-when-cross-origin");
+});
+
+test("la redirección por código incluye cabeceras de seguridad", async (t) => {
+  const { repo, router } = makeRouter(t);
+  repo.save("abc123", "https://www.wikipedia.org");
+  const res = new FakeResponse();
+
+  await router.handle(asReq("GET", "/abc123"), asRes(res));
+
+  assert.equal(res.status, 302);
+  assert.equal(res.headers["X-Content-Type-Options"], "nosniff");
+  assert.equal(res.headers["X-Frame-Options"], "DENY");
+});
+
 test("GET /launchdarkly-demo responde el estado del flag", async (t) => {
   const { router } = makeRouter(t);
   const res = new FakeResponse();
@@ -198,6 +222,30 @@ test("GET /healthz sin healthChecker configurado responde 503", async (t) => {
 
   assert.equal(res.status, 503);
   assert.deepEqual(JSON.parse(res.body), { status: "error" });
+});
+
+test("GET /openapi.json responde la especificación OpenAPI", async (t) => {
+  const { router } = makeRouter(t);
+  const res = new FakeResponse();
+
+  await router.handle(asReq("GET", "/openapi.json"), asRes(res));
+
+  assert.equal(res.status, 200);
+  const body = JSON.parse(res.body);
+  assert.equal(body.openapi, "3.0.3");
+  assert.ok(body.paths["/api/shorten"]);
+});
+
+test("GET /docs responde la UI de Swagger con CSP ampliada para el CDN", async (t) => {
+  const { router } = makeRouter(t);
+  const res = new FakeResponse();
+
+  await router.handle(asReq("GET", "/docs"), asRes(res));
+
+  assert.equal(res.status, 200);
+  assert.equal(res.headers["Content-Type"], "text/html");
+  assert.match(res.body, /SwaggerUIBundle/);
+  assert.match(res.headers["Content-Security-Policy"] ?? "", /cdn\.jsdelivr\.net/);
 });
 
 test("GET /api/links delega en controller.list", async (t) => {

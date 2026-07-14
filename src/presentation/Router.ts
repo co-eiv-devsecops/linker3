@@ -7,6 +7,32 @@ import { tracer as defaultTracer } from "../infrastructure/telemetry/otel.ts";
 import { type TracerLike, withSpan } from "../infrastructure/telemetry/Tracing.ts";
 import { sendHtml, sendJson } from "./http.ts";
 import type { LinkController } from "./LinkController.ts";
+import { openApiSpec } from "./openapiSpec.ts";
+
+/** Content Security Policy for `/docs`, relaxed to allow the Swagger UI CDN bundle. */
+const SWAGGER_CSP =
+  "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https://cdn.jsdelivr.net; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
+
+const SWAGGER_UI_HTML = `<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Linker API — Documentación</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css" />
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script>
+    window.onload = () => {
+      window.ui = SwaggerUIBundle({
+        url: "/openapi.json",
+        dom_id: "#swagger-ui",
+      });
+    };
+  </script>
+</body>
+</html>`;
 
 /**
  * Top-level HTTP request dispatcher.
@@ -143,6 +169,16 @@ export class Router {
         message: enabled
           ? "LaunchDarkly is working — the flag is ON"
           : "LaunchDarkly is working — the flag is OFF",
+      });
+    }
+
+    if (url === "/openapi.json" && method === "GET") {
+      return sendJson(res, 200, openApiSpec);
+    }
+
+    if ((url === "/docs" || url === "/docs/") && method === "GET") {
+      return sendHtml(res, 200, SWAGGER_UI_HTML, {
+        "Content-Security-Policy": SWAGGER_CSP,
       });
     }
 
