@@ -126,7 +126,45 @@ test(links): cubrir colisión de códigos generados
 Escribe el mensaje en imperativo y explica el *por qué* en el cuerpo si el
 cambio no es obvio.
 
-## 7. Convenciones de código
+## 7. Links en la documentación
+
+Todo link `http(s)://` externo en README, `LAUNCHDARKLY.md`, `docs/` o los
+archivos de `.github/` debe pasar por el propio acortador de Linker antes
+de mergear (dogfooding: es la funcionalidad central del proyecto).
+`scripts/shorten_wiki_links.py` automatiza esto:
+
+```bash
+# Solo reporta qué links faltan por acortar, no toca archivos ni red.
+# Es lo que corre .github/workflows/link-check.yml en cada PR.
+python3 scripts/shorten_wiki_links.py --check
+
+# Acorta de verdad: llama a POST /api/shorten contra producción y
+# reescribe los archivos con los links cortos resultantes.
+python3 scripts/shorten_wiki_links.py
+
+# Contra una instancia local en vez de producción (útil para probar el
+# script sin escribir en la base de datos real):
+python3 scripts/shorten_wiki_links.py --base-url http://localhost:3000
+```
+
+Requiere solo Python 3 (stdlib, sin `pip install`). No marca como
+pendientes: links a `localhost`/`127.0.0.1`, links que ya apuntan al propio
+Linker (evita acortar un short link de nuevo), y cualquier URL dentro de un
+bloque de código o `\texttt{}`/`\begin{lstlisting}` — esos son comandos de
+ejemplo (`git clone`, `curl`), no referencias de lectura; acortarlos los
+rompería (`git clone` contra un link acortado falla, porque git pide
+`/info/refs?service=git-upload-pack` y el router de Linker no resuelve
+sub-rutas). Si un link sobrevive a esas reglas pero aun así no debe
+acortarse (p. ej. el badge de CI del README, que es una imagen en vivo),
+agrégalo a `scripts/shorten_wiki_links.allowlist` en vez de ignorar el
+error del CI.
+
+El check corre en un workflow separado (`link-check.yml`), no en `ci.yml`,
+porque `ci.yml` ignora a propósito los cambios que solo tocan `.md`/`docs/`
+(para no gastar minutos de Actions en typecheck/lint/tests que no aplican)
+— exactamente los cambios que este check necesita revisar.
+
+## 8. Convenciones de código
 
 - **Frontend** (`public/index.html`): construir el DOM con
   `createElement`/`textContent`, **nunca** `innerHTML` — las URLs son
@@ -140,7 +178,7 @@ cambio no es obvio.
 - No comitees `linker.db`, `node_modules/` ni credenciales
   (`terraform.tfvars` está gitignoreado a propósito).
 
-## 8. Issues
+## 9. Issues
 
 Usa los formularios de issue (bug, funcionalidad, tarea técnica). Para
 dudas de uso sin definir aún, abre una
