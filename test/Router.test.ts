@@ -329,6 +329,28 @@ test("una ruta desconocida se despacha como redirección por código", async (t)
   );
 });
 
+test("HEAD /:code responde 200 con la URL de destino en Location, sin cuerpo ni incremento de visitas", async (t) => {
+  const { repo, router } = makeRouter(t);
+  repo.save("abc123", "https://www.wikipedia.org");
+  const res = new FakeResponse();
+
+  await router.handle(asReq("HEAD", "/abc123"), asRes(res));
+
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.Location, "https://www.wikipedia.org");
+  assert.equal(res.body, "");
+  assert.equal(repo.findByCode("abc123")?.visits, 0);
+});
+
+test("HEAD /:code responde 404 si el código no existe", async (t) => {
+  const { router } = makeRouter(t);
+  const res = new FakeResponse();
+
+  await router.handle(asReq("HEAD", "/missing"), asRes(res));
+
+  assert.equal(res.status, 404);
+});
+
 test("POST /api/shorten abre un request span y un span anidado de SQLite", async (t) => {
   const { router, events } = makeRouter(t);
   const res = new FakeResponse();
