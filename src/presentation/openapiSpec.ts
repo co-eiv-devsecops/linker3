@@ -67,6 +67,23 @@ export const openApiSpec = {
         },
       },
     },
+    "/api/links/{code}": {
+      delete: {
+        summary: "Elimina permanentemente un enlace acortado",
+        parameters: [
+          { name: "code", in: "path", required: true, schema: { type: "string" } },
+        ],
+        responses: {
+          "204": { description: "Enlace eliminado" },
+          "404": {
+            description: "El código no existe",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/Error" } },
+            },
+          },
+        },
+      },
+    },
     "/{code}": {
       get: {
         summary: "Redirige al destino del código corto",

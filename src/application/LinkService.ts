@@ -172,6 +172,18 @@ export class LinkService {
    *
    * @returns All links, newest first.
    */
+  delete(code: string): void {
+    withSpan(this.tracer, "link.delete", { code }, (span) => {
+      const deleted = this.repository.deleteByCode(code);
+      span.setAttribute("deleted", deleted);
+      if (!deleted) throw new NotFoundError("No encontrado");
+
+      this.activeLinksCount = Math.max(0, this.activeLinksCount - 1);
+      this.activeLinks.record(this.activeLinksCount);
+      this.logger.info("Enlace eliminado", { code });
+    });
+  }
+
   list(): Link[] {
     return withSpan(this.tracer, "link.list", {}, (span) => {
       const links = this.repository.findAll();

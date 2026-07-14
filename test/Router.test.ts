@@ -261,6 +261,24 @@ test("GET /api/links delega en controller.list", async (t) => {
   ]);
 });
 
+test("DELETE /api/links/:code elimina el enlace y responde 204", async (t) => {
+  const { repo, router } = makeRouter(t);
+  repo.save("borrar", "https://example.com");
+  const res = new FakeResponse();
+  await router.handle(asReq("DELETE", "/api/links/borrar"), asRes(res));
+  assert.equal(res.status, 204);
+  assert.equal(res.body, "");
+  assert.equal(repo.findByCode("borrar"), null);
+});
+
+test("DELETE /api/links/:code responde 404 si no existe", async (t) => {
+  const { router } = makeRouter(t);
+  const res = new FakeResponse();
+  await router.handle(asReq("DELETE", "/api/links/missing"), asRes(res));
+  assert.equal(res.status, 404);
+  assert.deepEqual(JSON.parse(res.body), { error: "No encontrado" });
+});
+
 test("una ruta desconocida se despacha como redirección por código", async (t) => {
   const { repo, router, events } = makeRouter(t);
   repo.save("abc123", "https://www.wikipedia.org");
@@ -363,6 +381,9 @@ test("un error inesperado responde 500 sin filtrar detalles", async () => {
     },
     save() {},
     incrementVisits() {},
+    deleteByCode() {
+      return false;
+    },
     findAll(): Link[] {
       throw new Error("detalle interno secreto");
     },

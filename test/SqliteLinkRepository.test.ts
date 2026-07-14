@@ -64,3 +64,15 @@ test("findAll devuelve lista vacía sin enlaces", (t) => {
   const repo = makeRepo(t);
   assert.deepEqual(repo.findAll(), []);
 });
+
+test("deleteByCode elimina un enlace existente", (t) => {
+  const repo = makeRepo(t);
+  repo.save("borrar", "https://example.com");
+  assert.equal(repo.deleteByCode("borrar"), true);
+  assert.equal(repo.findByCode("borrar"), null);
+});
+
+test("deleteByCode devuelve false si el enlace no existe", (t) => {
+  const repo = makeRepo(t);
+  assert.equal(repo.deleteByCode("missing"), false);
+});
