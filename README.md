@@ -206,8 +206,27 @@ sqlite3 linker.db < scripts/init-db.sql
 - CI general: .github/workflows/ci.yml
 - Pipeline de desarrollo (rama develop): .github/workflows/ci-cd-dev.yml
 - Pipeline de producción (rama main y tags v*): .github/workflows/ci-cd-prod.yml
+- Pipeline de lanzamiento de funcionalidad (manual): .github/workflows/feature-launch.yml
 
 Los PRs ejecutan CI antes de merge según la configuración de branch protection del repositorio.
+
+### Despliegue vs. lanzamiento de funcionalidad
+
+Son dos pipelines con propósitos distintos — no se reemplazan entre sí:
+
+| | `ci-cd-prod.yml` (despliegue) | `feature-launch.yml` (lanzamiento) |
+|---|---|---|
+| Cuándo usarlo | Hay código nuevo que aún no está en producción | El código ya está desplegado, pero dormido detrás de un flag |
+| Qué hace | Build, tests, imagen Docker, deploy a la VM, pruebas de API | Prende/apaga un flag de LaunchDarkly vía su API |
+| Toca la VM/infra | Sí | No |
+| Requiere rebuild | Sí | No — el SDK server-side ya evalúa el flag en tiempo real (streaming) |
+| Disparador | Push a `main` / tag `v*.*.*` | Manual (`workflow_dispatch`) |
+
+En la práctica: primero se despliega el código nuevo con el flag apagado (sin
+cambiar comportamiento visible), y **después**, cuando se quiere activar esa
+funcionalidad para los usuarios, se corre `feature-launch.yml` — sin volver a
+tocar el pipeline de despliegue. Ver [LAUNCHDARKLY.md](LAUNCHDARKLY.md) para
+el detalle de cómo se evalúan los flags en este proyecto.
 
 ## Despliegue
 
