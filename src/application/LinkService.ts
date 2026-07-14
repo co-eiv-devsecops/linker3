@@ -168,9 +168,29 @@ export class LinkService {
   }
 
   /**
-   * Lists every stored link.
+   * Looks up a short code's destination without following the redirect or
+   * incrementing its visit counter. Used to inspect a code before using it.
    *
-   * @returns All links, newest first.
+   * @param code - Short code to look up.
+   * @returns The stored {@link Link}.
+   * @throws {NotFoundError} If no link exists for `code`.
+   */
+  peek(code: string): Link {
+    return withSpan(this.tracer, "link.peek", { code }, (span) => {
+      const link = this.repository.findByCode(code);
+      span.setAttribute("found", link !== null);
+      if (!link) {
+        throw new NotFoundError("No encontrado");
+      }
+      return link;
+    });
+  }
+
+  /**
+   * Deletes a link by its short code.
+   *
+   * @param code - Short code to delete.
+   * @throws {NotFoundError} If no link exists for `code`.
    */
   delete(code: string): void {
     withSpan(this.tracer, "link.delete", { code }, (span) => {
