@@ -72,6 +72,11 @@ export function sendRedirect(res: ServerResponse, location: string): void {
   res.end();
 }
 
+export function sendNoContent(res: ServerResponse): void {
+  res.writeHead(204, SECURITY_HEADERS);
+  res.end();
+}
+
 /**
  * Reads and parses a request body as JSON.
  *

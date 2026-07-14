@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { LinkService } from "../application/LinkService.ts";
-import { readJsonBody, sendJson, sendRedirect } from "./http.ts";
+import { readJsonBody, sendJson, sendNoContent, sendRedirect } from "./http.ts";
 
 /**
  * Handles HTTP requests for link-related routes, translating between
@@ -64,5 +64,10 @@ export class LinkController {
   redirect(code: string, res: ServerResponse): void {
     const target = this.service.resolve(code);
     sendRedirect(res, target);
+  }
+
+  delete(code: string, res: ServerResponse): void {
+    this.service.delete(code);
+    sendNoContent(res);
   }
 }

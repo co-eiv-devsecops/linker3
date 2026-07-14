@@ -102,3 +102,15 @@ test("list devuelve todos los enlaces del repositorio", (t) => {
     { code: "uno", url: "https://nodejs.org", visits: 0 },
   ]);
 });
+
+test("delete elimina un enlace existente", (t) => {
+  const { repo, service } = makeService(t);
+  repo.save("borrar", "https://example.com");
+  service.delete("borrar");
+  assert.equal(repo.findByCode("borrar"), null);
+});
+
+test("delete lanza NotFoundError si el código no existe", (t) => {
+  const { service } = makeService(t);
+  assert.throws(() => service.delete("missing"), NotFoundError);
+});
