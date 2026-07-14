@@ -105,6 +105,31 @@ export const openApiSpec = {
           },
         },
       },
+      head: {
+        summary:
+          "Consulta la URL de destino de un código corto sin redirigir ni incrementar visitas",
+        parameters: [
+          {
+            name: "code",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          "200": {
+            description:
+              "El código existe; la URL de destino viene en el header Location (respuesta sin cuerpo)",
+            headers: {
+              Location: {
+                description: "URL de destino del código corto",
+                schema: { type: "string", format: "uri" },
+              },
+            },
+          },
+          "404": { description: "El código no existe" },
+        },
+      },
     },
     "/health": {
       get: {
