@@ -1,5 +1,5 @@
-import type { IncomingMessage, ServerResponse } from "node:http";
 import { ValidationError } from "../domain/errors.ts";
+import type { HttpRequest, HttpResponse } from "./HttpPort.ts";
 
 /**
  * Baseline security headers applied to every response: a strict
@@ -25,7 +25,7 @@ export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
  * defaults (e.g. to relax the CSP for a specific route).
  */
 export function sendJson(
-  res: ServerResponse,
+  res: HttpResponse,
   status: number,
   body: unknown,
   extraHeaders: Record<string, string> = {}
@@ -48,7 +48,7 @@ export function sendJson(
  * defaults (e.g. to relax the CSP for a specific route).
  */
 export function sendHtml(
-  res: ServerResponse,
+  res: HttpResponse,
   status: number,
   html: string,
   extraHeaders: Record<string, string> = {}
@@ -67,7 +67,7 @@ export function sendHtml(
  * @param res - Response to write to.
  * @param location - Target URL for the `Location` header.
  */
-export function sendRedirect(res: ServerResponse, location: string): void {
+export function sendRedirect(res: HttpResponse, location: string): void {
   res.writeHead(302, { Location: location, ...SECURITY_HEADERS });
   res.end();
 }
@@ -79,17 +79,22 @@ export function sendRedirect(res: ServerResponse, location: string): void {
  * @returns A promise resolving to the parsed JSON value.
  * @throws {ValidationError} If the body is not valid JSON (rejects the returned promise).
  */
-export function readJsonBody(req: IncomingMessage): Promise<unknown> {
-  return new Promise((resolve, reject) => {
-    let body = "";
-    req.on("data", (chunk) => (body += chunk));
-    req.on("error", reject);
-    req.on("end", () => {
-      try {
-        resolve(JSON.parse(body));
-      } catch {
-        reject(new ValidationError("JSON inválido"));
+export async function readJsonBody(req: HttpRequest): Promise<unknown> {
+  try {
+    let body: string;
+    if (req.readBody) {
+      body = await req.readBody();
+    } else {
+      // Keeps the port structurally compatible with Node streams for callers
+      // that invoke the Router directly (the Node adapter normally supplies readBody).
+      const chunks: Buffer[] = [];
+      for await (const chunk of req as HttpRequest & AsyncIterable<unknown>) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
       }
-    });
-  });
+      body = Buffer.concat(chunks).toString("utf8");
+    }
+    return JSON.parse(body);
+  } catch {
+    throw new ValidationError("JSON inválido");
+  }
 }
