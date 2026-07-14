@@ -66,7 +66,7 @@ export class LinkController {
     sendRedirect(res, target);
   }
 
-  delete(code: string, res: ServerResponse): void {
+  delete(code: string, res: HttpResponse): void {
     this.service.delete(code);
     sendNoContent(res);
   }
@@ -81,7 +81,7 @@ export class LinkController {
    * @param res - Response to write the metadata headers to.
    * @throws {NotFoundError} If no link exists for `code`.
    */
-  head(code: string, res: ServerResponse): void {
+  head(code: string, res: HttpResponse): void {
     const link = this.service.peek(code);
     sendHead(res, 200, { Location: link.url });
   }

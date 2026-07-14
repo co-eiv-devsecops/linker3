@@ -72,7 +72,7 @@ export function sendRedirect(res: HttpResponse, location: string): void {
   res.end();
 }
 
-export function sendNoContent(res: ServerResponse): void {
+export function sendNoContent(res: HttpResponse): void {
   res.writeHead(204, SECURITY_HEADERS);
   res.end();
 }
@@ -87,7 +87,7 @@ export function sendNoContent(res: ServerResponse): void {
  * defaults (e.g. `Location` to carry a short link's destination).
  */
 export function sendHead(
-  res: ServerResponse,
+  res: HttpResponse,
   status: number,
   extraHeaders: Record<string, string> = {}
 ): void {
