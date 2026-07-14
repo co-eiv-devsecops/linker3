@@ -190,6 +190,15 @@ export class Router implements HttpHandler {
       return this.controller.shorten(req, res);
     }
 
+    const deleteMatch = url.match(/^\/api\/links\/([^/?]+)$/);
+    if (deleteMatch && method === "DELETE") {
+      return this.controller.delete(decodeURIComponent(deleteMatch[1] as string), res);
+    }
+
+    if (method === "HEAD") {
+      return this.controller.head(url.slice(1), res);
+    }
+
     return this.controller.redirect(url.slice(1), res);
   }
 }
