@@ -1,6 +1,5 @@
 import type { LinkService } from "../application/LinkService.ts";
 import type { HttpRequest, HttpResponse } from "./HttpPort.ts";
-import { readJsonBody, sendJson, sendRedirect } from "./http.ts";
 import { readJsonBody, sendHead, sendJson, sendNoContent, sendRedirect } from "./http.ts";
 
 /**
