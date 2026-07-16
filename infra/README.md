@@ -13,6 +13,53 @@ para correr Linker) con distinto alcance:
 `infra/docker/Dockerfile` construye la misma definición de entorno que
 `cloud-init.yaml` instala en la VM (Node 22, sin dependencias externas).
 
+## infra/grafana/ — dashboard de observabilidad
+
+La definición versionada del dashboard principal está en
+[`infra/grafana/linker-service-health.json`](grafana/linker-service-health.json).
+El archivo se puede recrear desde Grafana mediante **Dashboards → New → Import
+dashboard**. Durante la importación se seleccionan el datasource
+Prometheus/Mimir de métricas y el datasource Loki de logs.
+
+El JSON no contiene UIDs propios de una cuenta, tokens ni URLs del stack. Por
+eso un integrante nuevo puede importarlo en otra instancia de Grafana sin
+necesitar acceso previo a la cuenta original.
+
+La aplicación inicializa OpenTelemetry en
+[`src/infrastructure/telemetry/otel.ts`](../src/infrastructure/telemetry/otel.ts)
+y exporta métricas, logs y trazas mediante OTLP. El destino y las credenciales
+se configuran con `OTEL_EXPORTER_OTLP_ENDPOINT` y
+`OTEL_EXPORTER_OTLP_HEADERS`. El nombre del recurso se toma de
+`OTEL_SERVICE_NAME` y, si no se define, es `linker-3`.
+
+### Paneles
+
+| Panel | Fuente OTel | Qué representa |
+|---|---|---|
+| Latencia de redirecciones — p50 / p95 | Histograma `redirect_duration_ms` en Prometheus/Mimir | Percentiles 50 y 95 del tiempo que tarda `LinkService.resolve()` en resolver y registrar una visita exitosa. |
+| Visitas a links acortados | Counter `redirects_total` en Prometheus/Mimir | Tasa por segundo de redirecciones exitosas; cada incremento equivale a una visita. |
+| Visitas en el período | Counter `redirects_total` en Prometheus/Mimir | Incremento estimado del contador durante el rango temporal seleccionado. |
+| Throughput HTTP | Logs OTel consultados en Loki | Requests por segundo, contando las líneas que `Router` escribe al terminar cada request HTTP. |
+| Tasa de errores HTTP 5xx | Logs OTel consultados en Loki | Proporción de requests registrados con nivel `ERROR` respecto al total; representa principalmente errores inesperados HTTP 500. |
+
+Las métricas se crean en
+[`src/application/LinkService.ts`](../src/application/LinkService.ts) y llegan
+al SDK mediante `OtelMeterAdapter`. Los logs HTTP se generan en
+[`src/presentation/Router.ts`](../src/presentation/Router.ts).
+
+Grafana puede normalizar nombres durante la conversión OTLP→Prometheus. Por
+ejemplo, `redirect_duration_ms_bucket` puede aparecer como
+`redirect_duration_ms_milliseconds_bucket`. Si hay telemetría pero el panel
+muestra `No data`, se debe buscar el nombre efectivo en **Explore** y ajustar
+la consulta. Si se configura otro `OTEL_SERVICE_NAME`, también se debe
+actualizar el selector `service_name` de los paneles Loki.
+
+La tasa de errores se deriva de logs porque actualmente no existen contadores
+HTTP dedicados de requests y errores. Los errores de negocio 4xx se registran
+como `WARN` y no se incluyen en el panel 5xx. Además, `/healthz` puede
+responder 503 sin emitir un log `ERROR`, por lo que ese caso no forma parte de
+esta tasa.
+
 ## infra/terraform-oracle/ — VM real en Oracle Cloud
 
 Ver [`infra/terraform-oracle/README.md`](terraform-oracle/README.md) para
