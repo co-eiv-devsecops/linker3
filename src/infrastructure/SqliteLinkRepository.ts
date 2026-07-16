@@ -124,6 +124,21 @@ export class SqliteLinkRepository implements LinkRepository {
    * @param row - Row returned by the SQLite driver.
    * @returns The corresponding {@link Link}.
    */
+  deleteByCode(code: string): boolean {
+    return withSpan(
+      this.tracer,
+      "db.sqlite.delete_by_code",
+      { "db.system": "sqlite", code },
+      (span) => {
+        this.logger.debug("Eliminando enlace por código", { code });
+        const result = this.db.prepare("DELETE FROM links WHERE code = ?").run(code);
+        const deleted = result.changes > 0;
+        span.setAttribute("deleted", deleted);
+        return deleted;
+      }
+    );
+  }
+
   private static toEntity(row: Link): Link {
     return { code: row.code, url: row.url, visits: row.visits };
   }

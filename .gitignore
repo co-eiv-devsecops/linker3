@@ -1,4 +1,5 @@
 node_modules/
+dist/
 linker.db
 *.db-journal
 .env

@@ -89,6 +89,24 @@ test("resolve lanza NotFoundError si el código no existe", (t) => {
   assert.throws(() => service.resolve("missing"), NotFoundError);
 });
 
+test("peek devuelve el link sin incrementar visitas", (t) => {
+  const { repo, service } = makeService(t);
+  repo.save("abc", "https://www.typescriptlang.org/docs/handbook/intro.html");
+
+  assert.deepEqual(service.peek("abc"), {
+    code: "abc",
+    url: "https://www.typescriptlang.org/docs/handbook/intro.html",
+    visits: 0,
+  });
+  assert.equal(repo.findByCode("abc")?.visits, 0);
+});
+
+test("peek lanza NotFoundError si el código no existe", (t) => {
+  const { service } = makeService(t);
+
+  assert.throws(() => service.peek("missing"), NotFoundError);
+});
+
 test("list devuelve todos los enlaces del repositorio", (t) => {
   const { repo, service } = makeService(t);
   repo.save("uno", "https://nodejs.org");
@@ -101,4 +119,16 @@ test("list devuelve todos los enlaces del repositorio", (t) => {
     { code: "dos", url: "https://www.typescriptlang.org", visits: 3 },
     { code: "uno", url: "https://nodejs.org", visits: 0 },
   ]);
+});
+
+test("delete elimina un enlace existente", (t) => {
+  const { repo, service } = makeService(t);
+  repo.save("borrar", "https://example.com");
+  service.delete("borrar");
+  assert.equal(repo.findByCode("borrar"), null);
+});
+
+test("delete lanza NotFoundError si el código no existe", (t) => {
+  const { service } = makeService(t);
+  assert.throws(() => service.delete("missing"), NotFoundError);
 });
