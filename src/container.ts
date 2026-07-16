@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { createServer, type Server } from "node:http";
+import type { Server } from "node:http";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { init, type LDClient } from "@launchdarkly/node-server-sdk";
@@ -7,6 +7,7 @@ import { createPool, type Pool } from "mysql2/promise";
 import { LinkService } from "./application/LinkService.ts";
 import { LinkValidator } from "./application/LinkValidator.ts";
 import type { AppConfig } from "./config.ts";
+import { createNodeHttpServer } from "./infrastructure/http/NodeHttpAdapter.ts";
 import { createLogger, type Logger } from "./infrastructure/Logger.ts";
 import { MySqlHealthChecker } from "./infrastructure/MySqlHealthChecker.ts";
 import { RandomCodeGenerator } from "./infrastructure/RandomCodeGenerator.ts";
@@ -31,7 +32,11 @@ export interface App {
   logger: Logger;
   /** The MySQL connection pool backing the `/healthz` check. */
   mysqlPool: Pool;
+  /** Provider-neutral HTTP entry point, reusable by serverless adapters. */
+  router: Router;
 }
+
+export type Application = Omit<App, "server">;
 
 /**
  * Composition root: instantiates and wires every layer (repository, code
@@ -43,7 +48,7 @@ export interface App {
  * `public/index.html` from disk. Useful for injecting a stub in tests.
  * @returns The wired {@link App}, ready to `listen()`.
  */
-export function createApp(config: AppConfig, homePage?: string): App {
+export function createApplication(config: AppConfig, homePage?: string): Application {
   const ui =
     homePage ??
     readFileSync(
@@ -75,9 +80,11 @@ export function createApp(config: AppConfig, homePage?: string): App {
   const healthChecker = new MySqlHealthChecker(mysqlPool, logger);
   const router = new Router(controller, ui, ldClient, logger, undefined, healthChecker);
 
-  const server = createServer((req, res) => {
-    void router.handle(req, res);
-  });
+  return { router, repository, ldClient, logger, mysqlPool };
+}
 
-  return { server, repository, ldClient, logger, mysqlPool };
+/** Builds the traditional Node HTTP deployment from the common application. */
+export function createApp(config: AppConfig, homePage?: string): App {
+  const application = createApplication(config, homePage);
+  return { ...application, server: createNodeHttpServer(application.router) };
 }
