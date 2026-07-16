@@ -191,3 +191,25 @@ test("GET /api/links lista los enlaces del más reciente al más antiguo", async
     ["dos", "uno"]
   );
 });
+
+test("DELETE /api/links/:code elimina un enlace existente", async (t) => {
+  const { base } = await startApp(t);
+  await fetch(`${base}/api/shorten`, {
+    method: "POST",
+    body: JSON.stringify({ url: "https://example.com", alias: "borrar" }),
+  });
+
+  const deleted = await fetch(`${base}/api/links/borrar`, { method: "DELETE" });
+  assert.equal(deleted.status, 204);
+  assert.equal(await deleted.text(), "");
+
+  const redirect = await fetch(`${base}/borrar`, { redirect: "manual" });
+  assert.equal(redirect.status, 404);
+});
+
+test("DELETE /api/links/:code inexistente responde 404", async (t) => {
+  const { base } = await startApp(t);
+  const res = await fetch(`${base}/api/links/missing`, { method: "DELETE" });
+  assert.equal(res.status, 404);
+  assert.deepEqual(await res.json(), { error: "No encontrado" });
+});

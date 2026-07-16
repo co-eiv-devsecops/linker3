@@ -1,0 +1,14 @@
+# Un patrón (regex de Python) por línea. Líneas vacías o que empiezan con
+# # se ignoran. Cada patrón se prueba con re.search contra la URL cruda
+# encontrada — no hace falta anclar ni escapar de más.
+#
+# Usa esto solo para links que son sintácticamente indistinguibles de un
+# link de documentación real pero que no deben acortarse (ej. un badge de
+# CI, que es una imagen en vivo, no una referencia de lectura). Los casos
+# "obvios" (localhost, comandos dentro de bloques de código, el propio
+# dominio de Linker) ya los excluye el script automáticamente — no hace
+# falta listarlos aquí.
+
+# Badge de estado de CI/CD en README.md (imagen SVG en vivo generada por
+# GitHub Actions) y su link de click-through a la página de Actions.
+github\.com/co-eiv-devsecops/linker3/actions/workflows/

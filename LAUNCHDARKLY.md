@@ -46,6 +46,19 @@ const enabled = await this.ldClient.boolVariation("my-first-flag", context, fals
 
 A working demo endpoint is live at `GET /launchdarkly-demo` — returns the current state of `my-first-flag` as JSON. Safe to remove once you no longer need it as a reference.
 
+### Launching a Feature Without a Deploy
+
+Because the server-side SDK streams flag changes in real time (point 3
+above), turning a flag on/off in a given environment takes effect on the
+already-running process — no rebuild, no redeploy. `.github/workflows/feature-launch.yml`
+automates exactly that: a manual (`workflow_dispatch`) pipeline that calls
+LaunchDarkly's Management API to flip a flag, completely separate from
+`ci-cd-prod.yml` (which builds and deploys code). See the
+["Despliegue vs. lanzamiento de funcionalidad"](README.md#despliegue-vs-lanzamiento-de-funcionalidad)
+section in the README for when to use each one. Requires the
+`LAUNCHDARKLY_API_TOKEN` repo secret (a LaunchDarkly **API access token**
+with write access to flags — not the same as `LAUNCHDARKLY_SDK_KEY`).
+
 ## Next Steps
 
 ### Feature Flag Best Practices
