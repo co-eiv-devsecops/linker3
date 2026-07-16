@@ -1,6 +1,6 @@
-import type { IncomingMessage, ServerResponse } from "node:http";
 import type { LinkService } from "../application/LinkService.ts";
-import { readJsonBody, sendJson, sendRedirect } from "./http.ts";
+import type { HttpRequest, HttpResponse } from "./HttpPort.ts";
+import { readJsonBody, sendHead, sendJson, sendNoContent, sendRedirect } from "./http.ts";
 
 /**
  * Handles HTTP requests for link-related routes, translating between
@@ -28,7 +28,7 @@ export class LinkController {
    * @param _req - Incoming request (unused).
    * @param res - Response to write the link list to.
    */
-  list(_req: IncomingMessage, res: ServerResponse): void {
+  list(_req: HttpRequest, res: HttpResponse): void {
     sendJson(res, 200, this.service.list());
   }
 
@@ -41,7 +41,7 @@ export class LinkController {
    * @throws {ValidationError} If the body is invalid JSON or the URL/alias fails validation.
    * @throws {ConflictError} If the requested alias is already taken.
    */
-  async shorten(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  async shorten(req: HttpRequest, res: HttpResponse): Promise<void> {
     const payload = (await readJsonBody(req)) as {
       url?: unknown;
       alias?: unknown;
@@ -61,8 +61,28 @@ export class LinkController {
    * @param res - Response to write the redirect to.
    * @throws {NotFoundError} If no link exists for `code`.
    */
-  redirect(code: string, res: ServerResponse): void {
+  redirect(code: string, res: HttpResponse): void {
     const target = this.service.resolve(code);
     sendRedirect(res, target);
+  }
+
+  delete(code: string, res: HttpResponse): void {
+    this.service.delete(code);
+    sendNoContent(res);
+  }
+
+  /**
+   * Handles `HEAD /:code`: looks up a short code's destination without
+   * redirecting or incrementing its visit counter, returning it in the
+   * `Location` header of a 200 response (never a 3xx, so clients don't
+   * auto-follow it).
+   *
+   * @param code - Short code extracted from the request path.
+   * @param res - Response to write the metadata headers to.
+   * @throws {NotFoundError} If no link exists for `code`.
+   */
+  head(code: string, res: HttpResponse): void {
+    const link = this.service.peek(code);
+    sendHead(res, 200, { Location: link.url });
   }
 }
