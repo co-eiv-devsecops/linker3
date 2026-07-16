@@ -1,12 +1,38 @@
-import type { IncomingMessage, ServerResponse } from "node:http";
 import type { LDClient } from "@launchdarkly/node-server-sdk";
 import { AppError } from "../domain/errors.ts";
 import type { HealthChecker } from "../domain/HealthChecker.ts";
 import { logger as defaultLogger, type Logger } from "../infrastructure/Logger.ts";
 import { tracer as defaultTracer } from "../infrastructure/telemetry/otel.ts";
 import { type TracerLike, withSpan } from "../infrastructure/telemetry/Tracing.ts";
+import type { HttpHandler, HttpRequest, HttpResponse } from "./HttpPort.ts";
 import { sendHtml, sendJson } from "./http.ts";
 import type { LinkController } from "./LinkController.ts";
+import { openApiSpec } from "./openapiSpec.ts";
+
+/** Content Security Policy for `/docs`, relaxed to allow the Swagger UI CDN bundle. */
+const SWAGGER_CSP =
+  "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https://cdn.jsdelivr.net; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
+
+const SWAGGER_UI_HTML = `<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Linker API — Documentación</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css" />
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script>
+    window.onload = () => {
+      window.ui = SwaggerUIBundle({
+        url: "/openapi.json",
+        dom_id: "#swagger-ui",
+      });
+    };
+  </script>
+</body>
+</html>`;
 
 /**
  * Top-level HTTP request dispatcher.
@@ -16,7 +42,7 @@ import type { LinkController } from "./LinkController.ts";
  * converting thrown {@link AppError}s (and unexpected errors) into JSON
  * error responses. Every request is logged on completion.
  */
-export class Router {
+export class Router implements HttpHandler {
   private readonly controller: LinkController;
   private readonly homePage: string;
   private readonly logger: Logger;
@@ -63,7 +89,7 @@ export class Router {
    * @param req - Incoming request.
    * @param res - Response to write to.
    */
-  async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  async handle(req: HttpRequest, res: HttpResponse): Promise<void> {
     const { method = "GET", url = "/" } = req;
 
     await withSpan(
@@ -108,7 +134,7 @@ export class Router {
    * @param req - Incoming request.
    * @param res - Response to write to.
    */
-  private async dispatch(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  private async dispatch(req: HttpRequest, res: HttpResponse): Promise<void> {
     const { method = "GET", url = "/" } = req;
 
     if (url === "/" || url === "/index.html") {
@@ -146,12 +172,31 @@ export class Router {
       });
     }
 
+    if (url === "/openapi.json" && method === "GET") {
+      return sendJson(res, 200, openApiSpec);
+    }
+
+    if ((url === "/docs" || url === "/docs/") && method === "GET") {
+      return sendHtml(res, 200, SWAGGER_UI_HTML, {
+        "Content-Security-Policy": SWAGGER_CSP,
+      });
+    }
+
     if (url === "/api/links" && method === "GET") {
       return this.controller.list(req, res);
     }
 
     if (url === "/api/shorten" && method === "POST") {
       return this.controller.shorten(req, res);
+    }
+
+    const deleteMatch = url.match(/^\/api\/links\/([^/?]+)$/);
+    if (deleteMatch && method === "DELETE") {
+      return this.controller.delete(decodeURIComponent(deleteMatch[1] as string), res);
+    }
+
+    if (method === "HEAD") {
+      return this.controller.head(url.slice(1), res);
     }
 
     return this.controller.redirect(url.slice(1), res);

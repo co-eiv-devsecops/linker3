@@ -1,5 +1,7 @@
 node_modules/
+dist/
 linker.db
+linker-serverless.zip
 *.db-journal
 .env
 coverage.txt

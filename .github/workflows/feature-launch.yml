@@ -1,0 +1,87 @@
+name: Feature Launch
+
+# Activa/desactiva una funcionalidad ya desplegada, vía un flag de
+# LaunchDarkly — sin build, sin Docker, sin tocar la VM de producción.
+# Distinto de ci-cd-prod.yml: ese pipeline construye y despliega código
+# nuevo; este solo cambia la configuración de un flag que el código
+# desplegado ya sabe evaluar en tiempo real (streaming SDK).
+#
+# Requiere el secret LAUNCHDARKLY_API_TOKEN (token de la API de gestión
+# de LaunchDarkly, con permiso de escritura sobre flags — distinto del
+# LAUNCHDARKLY_SDK_KEY que usa la app en runtime). Configúralo en
+# Settings → Secrets and variables → Actions.
+
+on:
+  workflow_dispatch:
+    inputs:
+      flag_key:
+        description: "Flag key en LaunchDarkly a activar/desactivar"
+        required: true
+        default: "my-first-flag"
+      environment:
+        description: "Environment key de LaunchDarkly (ver LAUNCHDARKLY.md)"
+        required: true
+        default: "production"
+      action:
+        description: "Acción sobre el flag"
+        required: true
+        default: "turnFlagOn"
+        type: choice
+        options:
+          - turnFlagOn
+          - turnFlagOff
+
+permissions:
+  contents: read
+
+concurrency:
+  group: feature-launch-${{ github.event.inputs.flag_key }}-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  launch:
+    name: Activar/desactivar flag en LaunchDarkly
+    runs-on: ubuntu-latest
+    steps:
+      - name: Aplicar el cambio vía la API de LaunchDarkly
+        env:
+          LD_API_TOKEN: ${{ secrets.LAUNCHDARKLY_API_TOKEN }}
+          FLAG_KEY: ${{ inputs.flag_key }}
+          LD_ENV: ${{ inputs.environment }}
+          FLAG_ACTION: ${{ inputs.action }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${LD_API_TOKEN:-}" ]; then
+            echo "::error::Falta el secret LAUNCHDARKLY_API_TOKEN (token de la API de LaunchDarkly con permiso de escritura sobre flags)."
+            exit 1
+          fi
+
+          body=$(printf '{"environmentKey":"%s","instructions":[{"kind":"%s"}]}' "$LD_ENV" "$FLAG_ACTION")
+
+          http_status=$(curl -sS -o response.json -w "%{http_code}" \
+            -X PATCH "https://app.launchdarkly.com/api/v2/flags/default/$FLAG_KEY" \
+            -H "Authorization: $LD_API_TOKEN" \
+            -H "Content-Type: application/json; domain-model=launchdarkly.semanticpatch" \
+            -d "$body")
+
+          cat response.json
+          echo
+
+          if [ "$http_status" -ge 300 ]; then
+            echo "::error::LaunchDarkly respondió $http_status al aplicar el cambio sobre '$FLAG_KEY'."
+            exit 1
+          fi
+
+          echo "Flag '$FLAG_KEY' -> $FLAG_ACTION en el entorno '$LD_ENV' aplicado correctamente."
+
+      - name: Confirmar el nuevo estado del flag
+        env:
+          LD_API_TOKEN: ${{ secrets.LAUNCHDARKLY_API_TOKEN }}
+          FLAG_KEY: ${{ inputs.flag_key }}
+          LD_ENV: ${{ inputs.environment }}
+        run: |
+          set -euo pipefail
+          curl -sS "https://app.launchdarkly.com/api/v2/flags/default/$FLAG_KEY?env=$LD_ENV" \
+            -H "Authorization: $LD_API_TOKEN" \
+          | grep -o '"on":[a-z]*' || true

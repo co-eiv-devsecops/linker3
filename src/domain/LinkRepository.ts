@@ -38,4 +38,7 @@ export interface LinkRepository {
    * @returns All links, ordered newest first.
    */
   findAll(): Link[];
+
+  /** Deletes a link and reports whether it existed. */
+  deleteByCode(code: string): boolean;
 }

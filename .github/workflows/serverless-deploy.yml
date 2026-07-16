@@ -1,0 +1,119 @@
+# Objetivo de despliegue serverless de PROD (issue #115).
+#
+# Convive con ci-cd-prod.yml en vez de reemplazarlo: ci-cd-prod.yml despliega
+# el artefacto en la VM de OCI (https://3.n-la-c.app) y este workflow despliega
+# EL MISMO artefacto (dist/ compilado por tsc + public/ + deps de producción)
+# como función AWS Lambda detrás de una Function URL. Ver docs/serverless.md.
+#
+# El deploy real solo corre si el repositorio tiene configuradas las
+# credenciales de AWS (secrets AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY y
+# vars AWS_REGION / LAMBDA_FUNCTION_NAME). Sin ellas, el empaquetado y la
+# validación del handler corren igual y el deploy se omite con un aviso,
+# para que el pipeline no falle en forks o mientras no exista la cuenta.
+
+name: Serverless Deploy - Prod
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: prod-serverless-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  package:
+    name: Empaquetar artefacto serverless
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Validar el handler de Lambda localmente
+        run: |
+          npm run build
+          DB_PATH=":memory:" node -e "
+          import('./dist/serverless/aws.js').then(async (m) => {
+            const health = await m.handler({ rawPath: '/health', requestContext: { http: { method: 'GET' } } });
+            if (health.statusCode !== 200) throw new Error('GET /health -> ' + health.statusCode);
+            const post = await m.handler({ rawPath: '/api/shorten', requestContext: { http: { method: 'POST' } }, body: JSON.stringify({ url: 'https://nodejs.org' }) });
+            if (post.statusCode !== 201) throw new Error('POST /api/shorten -> ' + post.statusCode);
+            console.log('Handler serverless OK: /health 200, /api/shorten 201');
+          });
+          "
+
+      - name: Generar linker-serverless.zip
+        run: bash infra/scripts/package-serverless.sh
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: linker-serverless-${{ github.sha }}
+          path: linker-serverless.zip
+
+  deploy:
+    name: Deploy a AWS Lambda (PROD)
+    runs-on: ubuntu-latest
+    needs: package
+    environment:
+      name: prod-serverless
+    steps:
+      - name: Verificar credenciales de AWS configuradas
+        id: creds
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          LAMBDA_FUNCTION_NAME: ${{ vars.LAMBDA_FUNCTION_NAME }}
+        run: |
+          if [ -n "$AWS_ACCESS_KEY_ID" ] && [ -n "$AWS_REGION" ] && [ -n "$LAMBDA_FUNCTION_NAME" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Deploy serverless omitido: faltan AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY (secrets) o AWS_REGION/LAMBDA_FUNCTION_NAME (vars)."
+          fi
+
+      - uses: actions/download-artifact@v7
+        if: steps.creds.outputs.enabled == 'true'
+        with:
+          name: linker-serverless-${{ github.sha }}
+
+      - uses: aws-actions/configure-aws-credentials@v5
+        if: steps.creds.outputs.enabled == 'true'
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Actualizar código de la función Lambda
+        if: steps.creds.outputs.enabled == 'true'
+        run: |
+          aws lambda update-function-code \
+            --function-name "${{ vars.LAMBDA_FUNCTION_NAME }}" \
+            --zip-file fileb://linker-serverless.zip \
+            --publish
+          aws lambda wait function-updated \
+            --function-name "${{ vars.LAMBDA_FUNCTION_NAME }}"
+
+      - name: Smoke test contra la Function URL
+        if: steps.creds.outputs.enabled == 'true' && vars.LAMBDA_FUNCTION_URL != ''
+        run: |
+          URL="${{ vars.LAMBDA_FUNCTION_URL }}"
+          URL="${URL%/}"
+          for i in $(seq 1 10); do
+            curl -sf "$URL/health" > /dev/null && break
+            sleep 2
+          done
+          curl -sf "$URL/health"
+          echo "Objetivo serverless de PROD sano: $URL/health"

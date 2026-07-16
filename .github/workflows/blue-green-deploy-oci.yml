@@ -1,0 +1,460 @@
+# Despliegue Blue/Green REAL en OCI (issues #101–#104 y #106).
+#
+# A diferencia de blue-green-deploy.yml (simulación didáctica del patrón),
+# este workflow crea infraestructura real:
+#   1. crear-green      — Terraform crea la instancia efímera linker-green-<release>
+#   2. qa-green         — healthcheck + pruebas funcionales/carga vía OCI Bastion
+#   3. identificar-blue — resuelve qué instancia sirve el tráfico hoy (blue)
+#   4. aprobar          — aprobación manual (environment prod)
+#   5. switchover       — mueve la IP pública reservada de prod hacia green
+#   6. gate-grafana     — verifica métricas post-despliegue contra umbrales
+#   7. rollback-a-blue  — si algo falló tras la aprobación, devuelve el tráfico
+#   8. limpiar          — destruye la instancia que quedó sin tráfico (nunca la activa)
+#
+# 0 operaciones manuales en la consola de OCI: todo va por Terraform/OCI CLI.
+# Configuración (vars/secrets del repo): ver docs/operaciones.md.
+name: Blue/Green Deployment (OCI real)
+
+on:
+  workflow_dispatch:
+    inputs:
+      omitir_prueba_carga:
+        description: "Omitir la prueba de carga contra green (solo smoke test)"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+concurrency:
+  group: blue-green-oci
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+  PROD_URL: https://3.n-la-c.app
+
+jobs:
+  crear-green:
+    name: 1) Crear instancia green real (Terraform)
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.release.outputs.release_id }}
+      instance_id: ${{ steps.green.outputs.instance_id }}
+      display_name: ${{ steps.green.outputs.display_name }}
+      private_ip: ${{ steps.green.outputs.private_ip }}
+      private_ip_ocid: ${{ steps.green.outputs.private_ip_ocid }}
+    env:
+      TF_VAR_tenancy_ocid: ${{ secrets.OCI_CLI_TENANCY }}
+      TF_VAR_user_ocid: ${{ secrets.OCI_CLI_USER }}
+      TF_VAR_fingerprint: ${{ secrets.OCI_CLI_FINGERPRINT }}
+      TF_VAR_private_key: ${{ secrets.OCI_CLI_KEY_CONTENT }}
+      TF_VAR_region: ${{ vars.OCI_CLI_REGION }}
+      TF_VAR_compartment_id: ${{ vars.OCI_COMPARTMENT_OCID }}
+      TF_VAR_subnet_id: ${{ vars.OCI_SUBNET_OCID }}
+      TF_VAR_ssh_public_key: ${{ vars.DEPLOYMENT_PUBLIC_KEY }}
+      TF_VAR_deploy_color: green
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Definir release id
+        id: release
+        run: echo "release_id=${GITHUB_SHA::7}-run${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+
+      - name: Configurar variables opcionales de Terraform
+        run: |
+          if [ -n "${{ vars.OCI_AVAILABILITY_DOMAIN }}" ]; then
+            echo "TF_VAR_availability_domain=${{ vars.OCI_AVAILABILITY_DOMAIN }}" >> "$GITHUB_ENV"
+          fi
+          if [ -n "${{ vars.OCI_IMAGE_OCID }}" ]; then
+            echo "TF_VAR_image_id=${{ vars.OCI_IMAGE_OCID }}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Terraform init + validate
+        working-directory: infra/terraform-blue-green
+        run: |
+          terraform init -input=false
+          terraform validate
+
+      - name: Terraform apply (crear green, blue no se toca)
+        working-directory: infra/terraform-blue-green
+        env:
+          TF_VAR_release_id: ${{ steps.release.outputs.release_id }}
+        run: terraform apply -input=false -auto-approve
+
+      - name: Exponer outputs de la instancia green
+        id: green
+        working-directory: infra/terraform-blue-green
+        run: |
+          {
+            echo "instance_id=$(terraform output -raw instance_id)"
+            echo "display_name=$(terraform output -raw display_name)"
+            echo "private_ip=$(terraform output -raw private_ip)"
+            echo "private_ip_ocid=$(terraform output -raw private_ip_ocid)"
+          } >> "$GITHUB_OUTPUT"
+          echo "Instancia green creada: $(terraform output -raw display_name) ($(terraform output -raw private_ip))"
+
+      - name: Guardar tfstate como artefacto de auditoría
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: tfstate-green-${{ github.run_id }}
+          path: infra/terraform-blue-green/terraform.tfstate
+          retention-days: 5
+
+  qa-green:
+    name: 2) Healthcheck y pruebas funcionales contra green
+    runs-on: ubuntu-latest
+    needs: crear-green
+    env:
+      OCI_CLI_USER: ${{ secrets.OCI_CLI_USER }}
+      OCI_CLI_TENANCY: ${{ secrets.OCI_CLI_TENANCY }}
+      OCI_CLI_FINGERPRINT: ${{ secrets.OCI_CLI_FINGERPRINT }}
+      OCI_CLI_KEY_CONTENT: ${{ secrets.OCI_CLI_KEY_CONTENT }}
+      OCI_CLI_REGION: ${{ vars.OCI_CLI_REGION }}
+      OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING: "True"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar OCI CLI
+        run: pip install --quiet oci-cli
+
+      - name: Preparar llaves SSH para el bastion
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOYMENT_PRIVATE_KEY }}" > ~/.ssh/bg_key
+          printf '%s\n' "${{ vars.DEPLOYMENT_PUBLIC_KEY }}" > ~/.ssh/bg_key.pub
+          chmod 600 ~/.ssh/bg_key
+
+      - name: Abrir túnel bastion hacia green (puerto 80)
+        env:
+          BASTION_OCID: ${{ vars.OCI_BASTION_OCID }}
+          TARGET_IP: ${{ needs.crear-green.outputs.private_ip }}
+        run: |
+          SSH_PRIVATE_KEY_FILE=~/.ssh/bg_key \
+          SSH_PUBLIC_KEY_FILE=~/.ssh/bg_key.pub \
+          TARGET_PORT=80 LOCAL_PORT=8080 TUNNEL_PID_FILE=tunnel.pid \
+            bash infra/scripts/blue-green/open_tunnel.sh
+
+      - name: Esperar a que green responda 200 (cloud-init puede tardar)
+        run: |
+          HEALTH_URL=http://127.0.0.1:8080/health ATTEMPTS=60 SLEEP_SECONDS=10 \
+            bash infra/scripts/blue-green/wait_for_health.sh
+
+      - name: Smoke test funcional (crear, listar, redirigir)
+        run: python3 scripts/test_requests.py --base-url http://127.0.0.1:8080 | tee qa-smoke.log
+
+      - name: Prueba de carga escalonada contra green
+        if: github.event.inputs.omitir_prueba_carga != 'true'
+        run: |
+          python3 scripts/load_test.py --base-url http://127.0.0.1:8080 \
+            --start-concurrency 2 --max-concurrency 32 --requests-per-stage 20 | tee qa-carga.log
+
+      - name: Cerrar túnel
+        if: always()
+        run: |
+          [ -f tunnel.pid ] && kill "$(cat tunnel.pid)" 2>/dev/null || true
+
+      - name: Publicar resultados de QA como artefacto
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: qa-green-${{ github.run_id }}
+          path: |
+            qa-smoke.log
+            qa-carga.log
+          if-no-files-found: ignore
+
+  identificar-blue:
+    name: 3) Identificar instancia activa (blue)
+    runs-on: ubuntu-latest
+    needs: crear-green
+    outputs:
+      active_instance_id: ${{ steps.lookup.outputs.active_instance_id }}
+      active_display_name: ${{ steps.lookup.outputs.active_display_name }}
+      active_private_ip_ocid: ${{ steps.lookup.outputs.active_private_ip_ocid }}
+    env:
+      OCI_CLI_USER: ${{ secrets.OCI_CLI_USER }}
+      OCI_CLI_TENANCY: ${{ secrets.OCI_CLI_TENANCY }}
+      OCI_CLI_FINGERPRINT: ${{ secrets.OCI_CLI_FINGERPRINT }}
+      OCI_CLI_KEY_CONTENT: ${{ secrets.OCI_CLI_KEY_CONTENT }}
+      OCI_CLI_REGION: ${{ vars.OCI_CLI_REGION }}
+      OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING: "True"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar OCI CLI
+        run: pip install --quiet oci-cli
+
+      - name: Resolver instancia que sirve el tráfico actual
+        id: lookup
+        env:
+          RESERVED_PUBLIC_IP_OCID: ${{ vars.OCI_RESERVED_PUBLIC_IP_OCID }}
+          COMPARTMENT_OCID: ${{ vars.OCI_COMPARTMENT_OCID }}
+        run: bash infra/scripts/blue-green/lookup_active_instance.sh
+
+      - name: Sanidad — la activa no puede ser la green recién creada
+        run: |
+          if [ "${{ steps.lookup.outputs.active_instance_id }}" = "${{ needs.crear-green.outputs.instance_id }}" ]; then
+            echo "::error::La instancia activa ya es la green recién creada; estado inconsistente."
+            exit 1
+          fi
+
+  aprobar-switchover:
+    name: 4) Aprobación manual para mover tráfico
+    runs-on: ubuntu-latest
+    needs: [qa-green, identificar-blue, crear-green]
+    environment:
+      name: prod
+      url: https://3.n-la-c.app
+    steps:
+      - name: Resumen para quien aprueba
+        run: |
+          echo "QA de green superado. Al aprobar, el tráfico de $PROD_URL pasará de:"
+          echo "  blue : ${{ needs.identificar-blue.outputs.active_display_name }}"
+          echo "  green: ${{ needs.crear-green.outputs.display_name }}"
+
+  switchover:
+    name: 5) Switchover real de tráfico a green
+    runs-on: ubuntu-latest
+    needs: [crear-green, identificar-blue, aprobar-switchover]
+    env:
+      OCI_CLI_USER: ${{ secrets.OCI_CLI_USER }}
+      OCI_CLI_TENANCY: ${{ secrets.OCI_CLI_TENANCY }}
+      OCI_CLI_FINGERPRINT: ${{ secrets.OCI_CLI_FINGERPRINT }}
+      OCI_CLI_KEY_CONTENT: ${{ secrets.OCI_CLI_KEY_CONTENT }}
+      OCI_CLI_REGION: ${{ vars.OCI_CLI_REGION }}
+      OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING: "True"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar OCI CLI
+        run: pip install --quiet oci-cli
+
+      - name: Mover la IP pública reservada hacia green
+        env:
+          RESERVED_PUBLIC_IP_OCID: ${{ vars.OCI_RESERVED_PUBLIC_IP_OCID }}
+          TARGET_PRIVATE_IP_OCID: ${{ needs.crear-green.outputs.private_ip_ocid }}
+        run: bash infra/scripts/blue-green/switch_traffic.sh
+
+      - name: Preparar llaves SSH para el bastion (TLS)
+        if: vars.TLS_CERTBOT_EMAIL != ''
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOYMENT_PRIVATE_KEY }}" > ~/.ssh/bg_key
+          printf '%s\n' "${{ vars.DEPLOYMENT_PUBLIC_KEY }}" > ~/.ssh/bg_key.pub
+          chmod 600 ~/.ssh/bg_key
+
+      - name: Emitir certificado TLS en green (certbot, opcional)
+        if: vars.TLS_CERTBOT_EMAIL != ''
+        env:
+          BASTION_OCID: ${{ vars.OCI_BASTION_OCID }}
+          TARGET_IP: ${{ needs.crear-green.outputs.private_ip }}
+        run: |
+          DOMAIN="${PROD_URL#https://}"; DOMAIN="${DOMAIN#http://}"; DOMAIN="${DOMAIN%%/*}"
+          SSH_PRIVATE_KEY_FILE=~/.ssh/bg_key \
+          SSH_PUBLIC_KEY_FILE=~/.ssh/bg_key.pub \
+            bash infra/scripts/blue-green/run_remote.sh \
+              "sudo certbot --nginx -d '$DOMAIN' --non-interactive --agree-tos -m '${{ vars.TLS_CERTBOT_EMAIL }}' --redirect"
+
+      - name: Verificar que el tráfico llega a green
+        env:
+          RESERVED_PUBLIC_IP_OCID: ${{ vars.OCI_RESERVED_PUBLIC_IP_OCID }}
+          EXPECTED_PRIVATE_IP_OCID: ${{ needs.crear-green.outputs.private_ip_ocid }}
+        run: |
+          VERIFY_URL="${{ vars.BLUE_GREEN_VERIFY_URL }}"
+          VERIFY_URL="${VERIFY_URL:-$PROD_URL/health}"
+          VERIFY_URL="$VERIFY_URL" bash infra/scripts/blue-green/verify_switchover.sh
+
+  gate-grafana:
+    name: 6) Gate post-despliegue con métricas de Grafana
+    runs-on: ubuntu-latest
+    needs: switchover
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verificar configuración de Grafana
+        id: config
+        env:
+          GRAFANA_URL: ${{ vars.GRAFANA_URL }}
+          GRAFANA_API_TOKEN: ${{ secrets.GRAFANA_API_TOKEN }}
+        run: |
+          if [ -z "$GRAFANA_URL" ] || [ -z "$GRAFANA_API_TOKEN" ]; then
+            echo "configurado=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Gate de Grafana OMITIDO: configure vars.GRAFANA_URL, vars.GRAFANA_DATASOURCE_UID y secrets.GRAFANA_API_TOKEN para activarlo."
+          else
+            echo "configurado=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Esperar ventana de observación post-switchover
+        if: steps.config.outputs.configurado == 'true'
+        run: |
+          ESPERA="${{ vars.GRAFANA_WAIT_SECONDS || '120' }}"
+          echo "Dejando correr tráfico real ${ESPERA}s antes de evaluar métricas..."
+          sleep "$ESPERA"
+
+      - name: Consultar métricas contra umbrales
+        if: steps.config.outputs.configurado == 'true'
+        env:
+          GRAFANA_URL: ${{ vars.GRAFANA_URL }}
+          GRAFANA_DATASOURCE_UID: ${{ vars.GRAFANA_DATASOURCE_UID }}
+          GRAFANA_API_TOKEN: ${{ secrets.GRAFANA_API_TOKEN }}
+        run: |
+          EXTRA_ARGS=()
+          if [ -n "${{ vars.GRAFANA_P95_QUERY }}" ]; then
+            EXTRA_ARGS+=(--p95-query "${{ vars.GRAFANA_P95_QUERY }}")
+          fi
+          if [ -n "${{ vars.GRAFANA_ERROR_RATE_QUERY }}" ]; then
+            EXTRA_ARGS+=(--error-rate-query "${{ vars.GRAFANA_ERROR_RATE_QUERY }}" \
+                         --max-error-rate "${{ vars.GRAFANA_MAX_ERROR_RATE || '0.05' }}")
+          fi
+          python3 scripts/check_grafana.py \
+            --window "${{ vars.GRAFANA_WINDOW || '10m' }}" \
+            --max-p95-ms "${{ vars.GRAFANA_MAX_P95_MS || '500' }}" \
+            "${EXTRA_ARGS[@]}"
+
+  rollback-a-blue:
+    name: 7) Rollback automático de tráfico a blue
+    runs-on: ubuntu-latest
+    needs: [crear-green, identificar-blue, aprobar-switchover, switchover, gate-grafana]
+    if: >-
+      always() &&
+      needs.aprobar-switchover.result == 'success' &&
+      needs.identificar-blue.result == 'success' &&
+      (needs.switchover.result == 'failure' || needs.gate-grafana.result == 'failure')
+    env:
+      OCI_CLI_USER: ${{ secrets.OCI_CLI_USER }}
+      OCI_CLI_TENANCY: ${{ secrets.OCI_CLI_TENANCY }}
+      OCI_CLI_FINGERPRINT: ${{ secrets.OCI_CLI_FINGERPRINT }}
+      OCI_CLI_KEY_CONTENT: ${{ secrets.OCI_CLI_KEY_CONTENT }}
+      OCI_CLI_REGION: ${{ vars.OCI_CLI_REGION }}
+      OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING: "True"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar OCI CLI
+        run: pip install --quiet oci-cli
+
+      - name: Devolver la IP pública reservada a blue
+        env:
+          RESERVED_PUBLIC_IP_OCID: ${{ vars.OCI_RESERVED_PUBLIC_IP_OCID }}
+          TARGET_PRIVATE_IP_OCID: ${{ needs.identificar-blue.outputs.active_private_ip_ocid }}
+        run: bash infra/scripts/blue-green/switch_traffic.sh
+
+      - name: Verificar que el tráfico volvió a blue
+        env:
+          RESERVED_PUBLIC_IP_OCID: ${{ vars.OCI_RESERVED_PUBLIC_IP_OCID }}
+          EXPECTED_PRIVATE_IP_OCID: ${{ needs.identificar-blue.outputs.active_private_ip_ocid }}
+        run: |
+          VERIFY_URL="${{ vars.BLUE_GREEN_VERIFY_URL }}"
+          VERIFY_URL="${VERIFY_URL:-$PROD_URL/health}"
+          VERIFY_URL="$VERIFY_URL" bash infra/scripts/blue-green/verify_switchover.sh
+
+  limpiar:
+    name: 8) Limpieza — destruir la instancia sin tráfico
+    runs-on: ubuntu-latest
+    needs:
+      - crear-green
+      - qa-green
+      - identificar-blue
+      - aprobar-switchover
+      - switchover
+      - gate-grafana
+      - rollback-a-blue
+    if: always() && needs.crear-green.result == 'success'
+    env:
+      OCI_CLI_USER: ${{ secrets.OCI_CLI_USER }}
+      OCI_CLI_TENANCY: ${{ secrets.OCI_CLI_TENANCY }}
+      OCI_CLI_FINGERPRINT: ${{ secrets.OCI_CLI_FINGERPRINT }}
+      OCI_CLI_KEY_CONTENT: ${{ secrets.OCI_CLI_KEY_CONTENT }}
+      OCI_CLI_REGION: ${{ vars.OCI_CLI_REGION }}
+      OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING: "True"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar OCI CLI
+        run: pip install --quiet oci-cli
+
+      # La fuente de verdad de "quién tiene el tráfico" se consulta AHORA,
+      # no al inicio del run: si hubo rollback, la activa volvió a ser blue.
+      - name: Resolver instancia activa actual (fuente de verdad)
+        id: activa
+        env:
+          RESERVED_PUBLIC_IP_OCID: ${{ vars.OCI_RESERVED_PUBLIC_IP_OCID }}
+          COMPARTMENT_OCID: ${{ vars.OCI_COMPARTMENT_OCID }}
+        run: bash infra/scripts/blue-green/lookup_active_instance.sh
+
+      - name: Decidir y terminar la instancia sin tráfico
+        env:
+          ACTIVE_INSTANCE_OCID: ${{ steps.activa.outputs.active_instance_id }}
+        run: |
+          if [ "${{ needs.gate-grafana.result }}" = "success" ]; then
+            VICTIMA="${{ needs.identificar-blue.outputs.active_instance_id }}"
+            echo "Despliegue exitoso: se destruye la blue anterior (${{ needs.identificar-blue.outputs.active_display_name }})."
+          else
+            VICTIMA="${{ needs.crear-green.outputs.instance_id }}"
+            echo "Despliegue fallido/abortado: se destruye la green (${{ needs.crear-green.outputs.display_name }})."
+          fi
+          if [ -z "$VICTIMA" ]; then
+            echo "::error::No se pudo determinar la instancia a destruir; revise manualmente vía pipeline."
+            exit 1
+          fi
+          INSTANCE_OCID="$VICTIMA" bash infra/scripts/blue-green/terminate_instance.sh
+
+  resumen:
+    name: Resumen del despliegue
+    runs-on: ubuntu-latest
+    needs:
+      - crear-green
+      - qa-green
+      - identificar-blue
+      - aprobar-switchover
+      - switchover
+      - gate-grafana
+      - rollback-a-blue
+      - limpiar
+    if: always()
+    steps:
+      - name: Mostrar resumen
+        run: |
+          echo "Blue/Green real en OCI — release ${{ needs.crear-green.outputs.release_id }}"
+          echo "  Green creada:        ${{ needs.crear-green.outputs.display_name }} -> ${{ needs.crear-green.result }}"
+          echo "  QA en green:         ${{ needs.qa-green.result }}"
+          echo "  Blue identificada:   ${{ needs.identificar-blue.outputs.active_display_name }} -> ${{ needs.identificar-blue.result }}"
+          echo "  Aprobación:          ${{ needs.aprobar-switchover.result }}"
+          echo "  Switchover:          ${{ needs.switchover.result }}"
+          echo "  Gate Grafana:        ${{ needs.gate-grafana.result }}"
+          echo "  Rollback a blue:     ${{ needs.rollback-a-blue.result }}"
+          echo "  Limpieza:            ${{ needs.limpiar.result }}"

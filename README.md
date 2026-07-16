@@ -206,8 +206,33 @@ sqlite3 linker.db < scripts/init-db.sql
 - CI general: .github/workflows/ci.yml
 - Pipeline de desarrollo (rama develop): .github/workflows/ci-cd-dev.yml
 - Pipeline de producción (rama main y tags v*): .github/workflows/ci-cd-prod.yml
+- Pipeline de lanzamiento de funcionalidad (manual): .github/workflows/feature-launch.yml
+- Despliegue blue/green real en OCI (manual): .github/workflows/blue-green-deploy-oci.yml
+
+La guía de onboarding operativo (cómo contribuir, correr los scripts del repo,
+qué pipeline usar y por qué nunca se opera OCI a mano) está en
+[docs/operaciones.md](docs/operaciones.md); la de observabilidad (acceder a
+Grafana y leer los dashboards) en [docs/grafana.md](docs/grafana.md).
 
 Los PRs ejecutan CI antes de merge según la configuración de branch protection del repositorio.
+
+### Despliegue vs. lanzamiento de funcionalidad
+
+Son dos pipelines con propósitos distintos — no se reemplazan entre sí:
+
+| | `ci-cd-prod.yml` (despliegue) | `feature-launch.yml` (lanzamiento) |
+|---|---|---|
+| Cuándo usarlo | Hay código nuevo que aún no está en producción | El código ya está desplegado, pero dormido detrás de un flag |
+| Qué hace | Build, tests, imagen Docker, deploy a la VM, pruebas de API | Prende/apaga un flag de LaunchDarkly vía su API |
+| Toca la VM/infra | Sí | No |
+| Requiere rebuild | Sí | No — el SDK server-side ya evalúa el flag en tiempo real (streaming) |
+| Disparador | Push a `main` / tag `v*.*.*` | Manual (`workflow_dispatch`) |
+
+En la práctica: primero se despliega el código nuevo con el flag apagado (sin
+cambiar comportamiento visible), y **después**, cuando se quiere activar esa
+funcionalidad para los usuarios, se corre `feature-launch.yml` — sin volver a
+tocar el pipeline de despliegue. Ver [LAUNCHDARKLY.md](LAUNCHDARKLY.md) para
+el detalle de cómo se evalúan los flags en este proyecto.
 
 ## Despliegue
 
@@ -215,6 +240,11 @@ La guía completa está en docs/guia-despliegue.tex. Resumen de opciones:
 
 - Provisionar VM con cloud-init.yaml.
 - Provisionar OCI con infra/terraform-oracle.
+- Despliegue blue/green real (instancia green efímera + switchover de IP)
+  con el workflow blue-green-deploy-oci.yml e infra/terraform-blue-green.
+- Objetivo serverless adicional de PROD (AWS Lambda + Function URL) con el
+  workflow serverless-deploy.yml e infra/terraform-aws-lambda. Ver
+  docs/serverless.md.
 - Probar paridad local con infra/terraform + infra/docker.
 - Actualizar una VM ya provisionada con:
 
@@ -223,6 +253,26 @@ bash infra/scripts/deploy.sh
 ```
 
 ## Infraestructura y paridad de entornos
+
+### Artefacto común para Node, AWS Lambda y Azure Functions
+
+La capa HTTP usa los contratos neutrales de `src/presentation/HttpPort.ts`.
+El servidor tradicional se expone mediante `NodeHttpAdapter`; los entrypoints
+serverless son `src/serverless/aws.ts` y `src/serverless/azure.ts`. Los tres
+ejecutan el mismo `Router`, `LinkController` y `LinkService`.
+
+```bash
+npm run build
+```
+
+El directorio `dist/` resultante es el artefacto común. Configure
+`dist/serverless/aws.handler` en Lambda. En Azure Functions, registre `handler`
+desde `dist/serverless/azure.js` en el trigger HTTP. El proceso Node usa
+`dist/main.js` (o `npm start` durante desarrollo).
+
+Los adaptadores no requieren SDKs de proveedor y reutilizan las dependencias en
+invocaciones calientes. En serverless, SQLite solo es apropiado para datos
+efímeros; la persistencia entre instancias requiere un repositorio externo.
 
 Ver infra/README.md para detalles de Terraform y Docker.
 

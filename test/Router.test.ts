@@ -105,6 +105,30 @@ test("GET / responde la página principal como HTML", async (t) => {
   assert.equal(res.body, "<h1>hola</h1>");
 });
 
+test("todas las respuestas incluyen cabeceras de seguridad", async (t) => {
+  const { router } = makeRouter(t, "<h1>hola</h1>");
+  const res = new FakeResponse();
+
+  await router.handle(asReq("GET", "/"), asRes(res));
+
+  assert.match(res.headers["Content-Security-Policy"] ?? "", /default-src 'self'/);
+  assert.equal(res.headers["X-Content-Type-Options"], "nosniff");
+  assert.equal(res.headers["X-Frame-Options"], "DENY");
+  assert.equal(res.headers["Referrer-Policy"], "strict-origin-when-cross-origin");
+});
+
+test("la redirección por código incluye cabeceras de seguridad", async (t) => {
+  const { repo, router } = makeRouter(t);
+  repo.save("abc123", "https://www.wikipedia.org");
+  const res = new FakeResponse();
+
+  await router.handle(asReq("GET", "/abc123"), asRes(res));
+
+  assert.equal(res.status, 302);
+  assert.equal(res.headers["X-Content-Type-Options"], "nosniff");
+  assert.equal(res.headers["X-Frame-Options"], "DENY");
+});
+
 test("GET /launchdarkly-demo responde el estado del flag", async (t) => {
   const { router } = makeRouter(t);
   const res = new FakeResponse();
@@ -200,6 +224,30 @@ test("GET /healthz sin healthChecker configurado responde 503", async (t) => {
   assert.deepEqual(JSON.parse(res.body), { status: "error" });
 });
 
+test("GET /openapi.json responde la especificación OpenAPI", async (t) => {
+  const { router } = makeRouter(t);
+  const res = new FakeResponse();
+
+  await router.handle(asReq("GET", "/openapi.json"), asRes(res));
+
+  assert.equal(res.status, 200);
+  const body = JSON.parse(res.body);
+  assert.equal(body.openapi, "3.0.3");
+  assert.ok(body.paths["/api/shorten"]);
+});
+
+test("GET /docs responde la UI de Swagger con CSP ampliada para el CDN", async (t) => {
+  const { router } = makeRouter(t);
+  const res = new FakeResponse();
+
+  await router.handle(asReq("GET", "/docs"), asRes(res));
+
+  assert.equal(res.status, 200);
+  assert.equal(res.headers["Content-Type"], "text/html");
+  assert.match(res.body, /SwaggerUIBundle/);
+  assert.match(res.headers["Content-Security-Policy"] ?? "", /cdn\.jsdelivr\.net/);
+});
+
 test("GET /api/links delega en controller.list", async (t) => {
   const { repo, router } = makeRouter(t);
   repo.save("abc", "https://www.wikipedia.org");
@@ -211,6 +259,24 @@ test("GET /api/links delega en controller.list", async (t) => {
   assert.deepEqual(JSON.parse(res.body), [
     { code: "abc", url: "https://www.wikipedia.org", visits: 0 },
   ]);
+});
+
+test("DELETE /api/links/:code elimina el enlace y responde 204", async (t) => {
+  const { repo, router } = makeRouter(t);
+  repo.save("borrar", "https://example.com");
+  const res = new FakeResponse();
+  await router.handle(asReq("DELETE", "/api/links/borrar"), asRes(res));
+  assert.equal(res.status, 204);
+  assert.equal(res.body, "");
+  assert.equal(repo.findByCode("borrar"), null);
+});
+
+test("DELETE /api/links/:code responde 404 si no existe", async (t) => {
+  const { router } = makeRouter(t);
+  const res = new FakeResponse();
+  await router.handle(asReq("DELETE", "/api/links/missing"), asRes(res));
+  assert.equal(res.status, 404);
+  assert.deepEqual(JSON.parse(res.body), { error: "No encontrado" });
 });
 
 test("una ruta desconocida se despacha como redirección por código", async (t) => {
@@ -261,6 +327,28 @@ test("una ruta desconocida se despacha como redirección por código", async (t)
         typeof event.value === "number"
     )
   );
+});
+
+test("HEAD /:code responde 200 con la URL de destino en Location, sin cuerpo ni incremento de visitas", async (t) => {
+  const { repo, router } = makeRouter(t);
+  repo.save("abc123", "https://www.wikipedia.org");
+  const res = new FakeResponse();
+
+  await router.handle(asReq("HEAD", "/abc123"), asRes(res));
+
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.Location, "https://www.wikipedia.org");
+  assert.equal(res.body, "");
+  assert.equal(repo.findByCode("abc123")?.visits, 0);
+});
+
+test("HEAD /:code responde 404 si el código no existe", async (t) => {
+  const { router } = makeRouter(t);
+  const res = new FakeResponse();
+
+  await router.handle(asReq("HEAD", "/missing"), asRes(res));
+
+  assert.equal(res.status, 404);
 });
 
 test("POST /api/shorten abre un request span y un span anidado de SQLite", async (t) => {
@@ -315,6 +403,9 @@ test("un error inesperado responde 500 sin filtrar detalles", async () => {
     },
     save() {},
     incrementVisits() {},
+    deleteByCode() {
+      return false;
+    },
     findAll(): Link[] {
       throw new Error("detalle interno secreto");
     },

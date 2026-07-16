@@ -1,15 +1,30 @@
 name: CI
+
+# Pipeline genérico para ramas de trabajo (feature/*, fix/*, etc.).
+# 'develop' y 'main' quedan excluidos porque tienen pipelines dedicados
+# (ci-cd-dev.yml y ci-cd-prod.yml); así se evita ejecutar typecheck/lint/tests
+# por duplicado y se reduce el consumo de minutos de GitHub Actions.
 on:
   push:
-    branches: ["**"]
+    branches-ignore: [develop, main]
+    paths-ignore: ["**/*.md", "docs/**"]
   pull_request:
+    # Los PR hacia develop ya los cubre ci-cd-dev.yml; los PR hacia main
+    # (que no tienen cobertura en push) se validan aquí.
+    branches-ignore: [develop]
+    paths-ignore: ["**/*.md", "docs/**"]
+
+# Cancela corridas previas de la misma ref cuando llega un push nuevo.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: "npm"

@@ -20,7 +20,7 @@ Requisitos:
   discutirlo antes en un issue.
 
 `npm ci` registra automáticamente los git hooks de Husky (ver
-[Git hooks](#5-git-hooks-husky) más abajo); no hace falta ningún paso extra.
+[Git hooks](#6-git-hooks-husky) más abajo); no hace falta ningún paso extra.
 
 Alternativa reproducible sin instalar Node localmente: `.devcontainer/`
 (Dev Containers) — ver [README.md](../README.md#devcontainer).
@@ -98,7 +98,47 @@ vigente vive en el script `test:coverage:check` de `package.json` — es la
 única fuente de verdad; si lo subes, actualízalo ahí (no solo en
 comentarios o docs).
 
-## 5. Git hooks (Husky)
+## 5. Pruebas de integración contra una instancia en vivo
+
+`test/**/*.test.ts` cubre lo unitario/integración local (`npm test`), pero
+antes de mover tráfico en un despliegue blue/green hace falta validar la
+instancia efímera que va a recibirlo. Dos scripts en `scripts/` cubren eso
+— ambos requieren solo Python 3 (stdlib, sin `pip install`) y aceptan
+`--base-url` para apuntar a cualquier instancia corriendo (local, la
+efímera "green", producción):
+
+**`test_requests.py`** — smoke test funcional: crea un link, confirma que
+aparece en el listado, confirma que redirige a la URL correcta. Sale con
+código 1 si algo falla.
+
+```bash
+python3 scripts/test_requests.py --base-url http://localhost:3000
+python3 scripts/test_requests.py --base-url https://green.internal:3000 --timeout 5
+```
+
+**`load_test.py`** — prueba de carga escalonada: dobla la concurrencia en
+etapas (2, 4, 8, 16...) contra `POST /api/shorten` hasta encontrar el
+punto de quiebre (tasa de error o p95 de latencia por encima del umbral),
+o hasta `--max-concurrency`. Por defecto es solo diagnóstico (sale 0 aunque
+encuentre un quiebre); con `--min-concurrency-required N` se convierte en
+un gate que falla si el quiebre aparece antes de `N`.
+
+```bash
+python3 scripts/load_test.py --base-url http://localhost:3000
+python3 scripts/load_test.py --base-url https://green.internal:3000 \
+  --start-concurrency 4 --max-concurrency 128 --requests-per-stage 50
+python3 scripts/load_test.py --base-url https://green.internal:3000 \
+  --min-concurrency-required 32   # falla el pipeline si no aguanta 32
+```
+
+`.github/workflows/blue-green-deploy.yml` ya invoca ambos (job "2) QA en
+entorno inactivo") contra una instancia efímera que arranca en el propio
+runner con una DB descartable — no hay una VM "green" real provisionada
+por ese pipeline (es una simulación del patrón para el curso), así que la
+instancia efímera in-runner hace ese papel. Los resultados de ambos
+scripts (cada check, con su detalle) quedan en el log de ese step.
+
+## 6. Git hooks (Husky)
 
 Se ejecutan automáticamente, sin pasos manuales:
 
@@ -111,7 +151,7 @@ Se ejecutan automáticamente, sin pasos manuales:
 Esto significa que si `npm test` falla localmente, ni siquiera podrás
 hacer `git push` — no hay forma de saltarse esto por accidente.
 
-## 6. Commits
+## 7. Commits
 
 Usamos [Conventional Commits](https://3.n-la-c.app/conventional-commits):
 
@@ -126,7 +166,45 @@ test(links): cubrir colisión de códigos generados
 Escribe el mensaje en imperativo y explica el *por qué* en el cuerpo si el
 cambio no es obvio.
 
-## 7. Convenciones de código
+## 8. Links en la documentación
+
+Todo link `http(s)://` externo en README, `LAUNCHDARKLY.md`, `docs/` o los
+archivos de `.github/` debe pasar por el propio acortador de Linker antes
+de mergear (dogfooding: es la funcionalidad central del proyecto).
+`scripts/shorten_wiki_links.py` automatiza esto:
+
+```bash
+# Solo reporta qué links faltan por acortar, no toca archivos ni red.
+# Es lo que corre .github/workflows/link-check.yml en cada PR.
+python3 scripts/shorten_wiki_links.py --check
+
+# Acorta de verdad: llama a POST /api/shorten contra producción y
+# reescribe los archivos con los links cortos resultantes.
+python3 scripts/shorten_wiki_links.py
+
+# Contra una instancia local en vez de producción (útil para probar el
+# script sin escribir en la base de datos real):
+python3 scripts/shorten_wiki_links.py --base-url http://localhost:3000
+```
+
+Requiere solo Python 3 (stdlib, sin `pip install`). No marca como
+pendientes: links a `localhost`/`127.0.0.1`, links que ya apuntan al propio
+Linker (evita acortar un short link de nuevo), y cualquier URL dentro de un
+bloque de código o `\texttt{}`/`\begin{lstlisting}` — esos son comandos de
+ejemplo (`git clone`, `curl`), no referencias de lectura; acortarlos los
+rompería (`git clone` contra un link acortado falla, porque git pide
+`/info/refs?service=git-upload-pack` y el router de Linker no resuelve
+sub-rutas). Si un link sobrevive a esas reglas pero aun así no debe
+acortarse (p. ej. el badge de CI del README, que es una imagen en vivo),
+agrégalo a `scripts/shorten_wiki_links.allowlist` en vez de ignorar el
+error del CI.
+
+El check corre en un workflow separado (`link-check.yml`), no en `ci.yml`,
+porque `ci.yml` ignora a propósito los cambios que solo tocan `.md`/`docs/`
+(para no gastar minutos de Actions en typecheck/lint/tests que no aplican)
+— exactamente los cambios que este check necesita revisar.
+
+## 9. Convenciones de código
 
 - **Frontend** (`public/index.html`): construir el DOM con
   `createElement`/`textContent`, **nunca** `innerHTML` — las URLs son
@@ -140,7 +218,7 @@ cambio no es obvio.
 - No comitees `linker.db`, `node_modules/` ni credenciales
   (`terraform.tfvars` está gitignoreado a propósito).
 
-## 8. Issues
+## 10. Issues
 
 Usa los formularios de issue (bug, funcionalidad, tarea técnica). Para
 dudas de uso sin definir aún, abre una
