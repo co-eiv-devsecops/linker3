@@ -94,3 +94,4 @@ Production is `https://3.n-la-c.app`, an Oracle Cloud VM behind nginx (reverse p
 - `infra/terraform/` + `infra/docker/` — local parity demo: same runtime environment (Node 22) as a Docker container, no cloud credentials needed.
 - `.devcontainer/` — codified dev environment (Node 22 image, port 3000 forwarded).
 - `infra/scripts/deploy.sh` — updates an already-provisioned VM: SSH in, `git pull` in `/opt/linker`, restart the `linker` service.
+- `infra/terraform-aws-lambda/` + `.github/workflows/serverless-deploy.yml` — additional PROD target: the same built artifact (`npm run build` → `dist/`, packaged by `infra/scripts/package-serverless.sh`) deployed as an AWS Lambda (`dist/serverless/aws.handler`) behind a Function URL. Coexists with the OCI VM; see `docs/serverless.md`. Deploy is skipped with a notice when AWS credentials aren't configured.
