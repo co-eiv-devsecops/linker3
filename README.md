@@ -242,6 +242,9 @@ La guía completa está en docs/guia-despliegue.tex. Resumen de opciones:
 - Provisionar OCI con infra/terraform-oracle.
 - Despliegue blue/green real (instancia green efímera + switchover de IP)
   con el workflow blue-green-deploy-oci.yml e infra/terraform-blue-green.
+- Objetivo serverless adicional de PROD (AWS Lambda + Function URL) con el
+  workflow serverless-deploy.yml e infra/terraform-aws-lambda. Ver
+  docs/serverless.md.
 - Probar paridad local con infra/terraform + infra/docker.
 - Actualizar una VM ya provisionada con:
 
