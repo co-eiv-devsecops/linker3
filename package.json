@@ -10,6 +10,7 @@
     "test:coverage": "node --experimental-strip-types --test --experimental-test-coverage \"test/**/*.test.ts\"",
     "test:coverage:check": "node --experimental-strip-types --test --experimental-test-coverage --test-coverage-lines=90 --test-coverage-branches=90 --test-coverage-functions=90 \"test/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json",
     "lint": "biome lint .",
     "format": "biome format --write .",
     "check": "biome check --write .",

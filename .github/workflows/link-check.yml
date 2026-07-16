@@ -1,0 +1,45 @@
+name: Link Check
+
+# Falla si se introduce un link http(s) externo en la documentación sin
+# pasar antes por el acortador propio de Linker (scripts/shorten_wiki_links.py).
+#
+# Complementa a ci.yml en vez de solaparse con él: ci.yml usa paths-ignore
+# para *no* correr typecheck/lint/tests en cambios que solo tocan
+# .md/.tex (no aplican y desperdician minutos de Actions); este workflow
+# hace exactamente lo opuesto — solo corre en esos cambios — y no necesita
+# Node ni npm ci, así que es rápido y barato.
+
+on:
+  push:
+    paths:
+      - "**/*.md"
+      - "**/*.tex"
+      - "scripts/shorten_wiki_links.py"
+      - "scripts/shorten_wiki_links.allowlist"
+  pull_request:
+    paths:
+      - "**/*.md"
+      - "**/*.tex"
+      - "scripts/shorten_wiki_links.py"
+      - "scripts/shorten_wiki_links.allowlist"
+
+concurrency:
+  group: link-check-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Verificar que los links externos estén acortados
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Buscar links http(s) sin acortar
+        run: python3 scripts/shorten_wiki_links.py --check
