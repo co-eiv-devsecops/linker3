@@ -207,6 +207,12 @@ sqlite3 linker.db < scripts/init-db.sql
 - Pipeline de desarrollo (rama develop): .github/workflows/ci-cd-dev.yml
 - Pipeline de producción (rama main y tags v*): .github/workflows/ci-cd-prod.yml
 - Pipeline de lanzamiento de funcionalidad (manual): .github/workflows/feature-launch.yml
+- Despliegue blue/green real en OCI (manual): .github/workflows/blue-green-deploy-oci.yml
+
+La guía de onboarding operativo (cómo contribuir, correr los scripts del repo,
+qué pipeline usar y por qué nunca se opera OCI a mano) está en
+[docs/operaciones.md](docs/operaciones.md); la de observabilidad (acceder a
+Grafana y leer los dashboards) en [docs/grafana.md](docs/grafana.md).
 
 Los PRs ejecutan CI antes de merge según la configuración de branch protection del repositorio.
 
@@ -234,6 +240,8 @@ La guía completa está en docs/guia-despliegue.tex. Resumen de opciones:
 
 - Provisionar VM con cloud-init.yaml.
 - Provisionar OCI con infra/terraform-oracle.
+- Despliegue blue/green real (instancia green efímera + switchover de IP)
+  con el workflow blue-green-deploy-oci.yml e infra/terraform-blue-green.
 - Probar paridad local con infra/terraform + infra/docker.
 - Actualizar una VM ya provisionada con:
 
