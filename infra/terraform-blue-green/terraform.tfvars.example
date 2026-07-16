@@ -1,0 +1,10 @@
+# Copiar a terraform.tfvars (gitignored) SOLO para pruebas locales del módulo.
+# En el pipeline estos valores llegan como TF_VAR_* desde vars/secrets del repo.
+
+compartment_id = "ocid1.compartment.oc1..xxxxx"
+subnet_id      = "ocid1.subnet.oc1.sa-bogota-1.xxxxx"
+release_id     = "manual-prueba"
+
+# region              = "sa-bogota-1"
+# availability_domain = "gyPa:SA-BOGOTA-1-AD-1"
+# ssh_public_key_path = "~/.ssh/linker.pub"
