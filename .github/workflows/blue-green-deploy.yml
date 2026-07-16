@@ -81,16 +81,56 @@ jobs:
           echo "Sin impacto en trafico porque sigue activo ${{ needs.preparar-escenario.outputs.activo }}"
 
   qa-en-inactivo:
-    name: 2) QA en entorno inactivo (simulado)
+    name: 2) QA en entorno inactivo (smoke test + carga reales)
     runs-on: ubuntu-latest
     needs: [preparar-escenario, despliegue-en-inactivo]
     environment:
       name: dev
     steps:
-      - name: Simular pruebas QA
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # No hay una VM "green" real provisionada por este workflow (es una
+      # simulación del patrón blue/green para el curso), así que la
+      # instancia efímera que representa el entorno inactivo
+      # (${{ needs.preparar-escenario.outputs.inactivo }}) corre aquí mismo,
+      # en el runner, con una DB descartable — el mismo binario que se
+      # desplegaría, solo que sin tráfico real detrás.
+      - name: Levantar instancia efímera del entorno inactivo
         run: |
-          echo "Ejecutando QA en ${{ needs.preparar-escenario.outputs.inactivo }}"
-          echo "QA completada en entorno inactivo"
+          set -euo pipefail
+          DB_PATH="$(mktemp -u --suffix=.db)"
+          PORT=3000 DB_PATH="$DB_PATH" npm start > server.log 2>&1 &
+          echo $! > server.pid
+          for i in $(seq 1 20); do
+            curl -sf http://localhost:3000/health > /dev/null 2>&1 && break
+            sleep 0.5
+          done
+          curl -sf http://localhost:3000/health > /dev/null
+
+      - name: Smoke test funcional (crear, listar, redirigir)
+        run: python3 scripts/test_requests.py --base-url http://localhost:3000
+
+      - name: Prueba de carga escalonada (diagnóstica, no bloquea el pipeline)
+        run: |
+          python3 scripts/load_test.py --base-url http://localhost:3000 \
+            --start-concurrency 2 --max-concurrency 32 --requests-per-stage 20
+
+      - name: Apagar la instancia efímera
+        if: always()
+        run: |
+          [ -f server.pid ] && kill "$(cat server.pid)" 2>/dev/null || true
+          cat server.log || true
 
   aprobar-cambio:
     name: 3) Aprobacion manual para mover trafico
