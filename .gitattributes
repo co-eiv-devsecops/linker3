@@ -1,0 +1,12 @@
+# Fuerza LF en el checkout de todos los archivos de texto, en cualquier SO.
+# Sin esto, un clone en Windows con core.autocrlf=true materializa CRLF en el
+# working tree y `biome ci` (que valida formato, incluidos los fines de línea)
+# falla localmente aunque el repositorio esté normalizado a LF.
+* text=auto eol=lf
+
+# Binarios: nunca normalizar
+*.pdf binary
+*.png binary
+*.jpg binary
+*.ico binary
+*.db binary
