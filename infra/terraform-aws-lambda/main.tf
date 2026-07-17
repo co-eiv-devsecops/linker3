@@ -52,7 +52,19 @@ resource "aws_lambda_function" "linker" {
   ]
 }
 
+resource "aws_lambda_alias" "live" {
+  name             = "live"
+  description      = "Alias estable de blue/green; el pipeline serverless-deploy.yml mueve function_version/routing_config con cada release (canary -> promote/rollback), no Terraform."
+  function_name    = aws_lambda_function.linker.function_name
+  function_version = aws_lambda_function.linker.version
+
+  lifecycle {
+    ignore_changes = [function_version, routing_config]
+  }
+}
+
 resource "aws_lambda_function_url" "linker" {
   function_name      = aws_lambda_function.linker.function_name
+  qualifier          = aws_lambda_alias.live.name
   authorization_type = "NONE"
 }

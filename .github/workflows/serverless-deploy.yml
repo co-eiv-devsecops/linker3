@@ -1,15 +1,7 @@
-# Objetivo de despliegue serverless de PROD (issue #115).
-#
-# Convive con ci-cd-prod.yml en vez de reemplazarlo: ci-cd-prod.yml despliega
-# el artefacto en la VM de OCI (https://3.n-la-c.app) y este workflow despliega
-# EL MISMO artefacto (dist/ compilado por tsc + public/ + deps de producción)
-# como función AWS Lambda detrás de una Function URL. Ver docs/serverless.md.
-#
-# El deploy real solo corre si el repositorio tiene configuradas las
-# credenciales de AWS (secrets AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY y
-# vars AWS_REGION / LAMBDA_FUNCTION_NAME). Sin ellas, el empaquetado y la
-# validación del handler corren igual y el deploy se omite con un aviso,
-# para que el pipeline no falle en forks o mientras no exista la cuenta.
+# Blue/green vía alias "live" con routing-config por peso (ver
+# infra/terraform-aws-lambda): publica versión nueva, canary 10%, verifica
+# contra la Function URL, promueve a 100% o revierte el alias. Se omite el
+# deploy (sin fallar) si faltan credenciales de AWS.
 
 name: Serverless Deploy - Prod
 
@@ -96,24 +88,102 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ vars.AWS_REGION }}
 
-      - name: Actualizar código de la función Lambda
+      - name: Resolver versión actual del alias estable
+        id: current
+        if: steps.creds.outputs.enabled == 'true'
+        env:
+          ALIAS: ${{ vars.LAMBDA_ALIAS_NAME || 'live' }}
+        run: |
+          set -euo pipefail
+          CURRENT="$(aws lambda get-alias \
+            --function-name "${{ vars.LAMBDA_FUNCTION_NAME }}" \
+            --name "$ALIAS" --query FunctionVersion --output text)"
+          echo "version=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "Versión actual en el alias '$ALIAS': $CURRENT"
+
+      - name: Publicar nueva versión del código
+        id: publish
         if: steps.creds.outputs.enabled == 'true'
         run: |
+          set -euo pipefail
           aws lambda update-function-code \
             --function-name "${{ vars.LAMBDA_FUNCTION_NAME }}" \
-            --zip-file fileb://linker-serverless.zip \
-            --publish
+            --zip-file fileb://linker-serverless.zip > /dev/null
           aws lambda wait function-updated \
             --function-name "${{ vars.LAMBDA_FUNCTION_NAME }}"
+          NEW="$(aws lambda publish-version \
+            --function-name "${{ vars.LAMBDA_FUNCTION_NAME }}" \
+            --query Version --output text)"
+          aws lambda wait function-updated \
+            --function-name "${{ vars.LAMBDA_FUNCTION_NAME }}" --qualifier "$NEW"
+          echo "version=$NEW" >> "$GITHUB_OUTPUT"
+          echo "Nueva versión publicada: $NEW"
 
-      - name: Smoke test contra la Function URL
+      - name: Iniciar canary (10% del tráfico a la nueva versión)
+        if: steps.creds.outputs.enabled == 'true'
+        env:
+          ALIAS: ${{ vars.LAMBDA_ALIAS_NAME || 'live' }}
+          CURRENT_VERSION: ${{ steps.current.outputs.version }}
+          NEW_VERSION: ${{ steps.publish.outputs.version }}
+        run: |
+          set -euo pipefail
+          aws lambda update-alias \
+            --function-name "${{ vars.LAMBDA_FUNCTION_NAME }}" \
+            --name "$ALIAS" \
+            --function-version "$CURRENT_VERSION" \
+            --routing-config "{\"AdditionalVersionWeights\":{\"$NEW_VERSION\":0.1}}" > /dev/null
+          echo "Canary activo: 90% v$CURRENT_VERSION / 10% v$NEW_VERSION"
+
+      - name: Verificar canary contra la Function URL
+        id: canary
         if: steps.creds.outputs.enabled == 'true' && vars.LAMBDA_FUNCTION_URL != ''
         run: |
+          set -euo pipefail
           URL="${{ vars.LAMBDA_FUNCTION_URL }}"
           URL="${URL%/}"
-          for i in $(seq 1 10); do
-            curl -sf "$URL/health" > /dev/null && break
-            sleep 2
+          for i in $(seq 1 20); do
+            curl -sf "$URL/health" > /dev/null || { echo "::error::Fallo en la petición $i/20 durante el canary"; exit 1; }
+            sleep 1
           done
-          curl -sf "$URL/health"
-          echo "Objetivo serverless de PROD sano: $URL/health"
+          echo "Canary saludable: 20/20 peticiones OK contra $URL/health"
+
+      - name: Promover la nueva versión a 100% del tráfico
+        if: steps.creds.outputs.enabled == 'true' && vars.LAMBDA_FUNCTION_URL != ''
+        env:
+          ALIAS: ${{ vars.LAMBDA_ALIAS_NAME || 'live' }}
+          NEW_VERSION: ${{ steps.publish.outputs.version }}
+        run: |
+          set -euo pipefail
+          aws lambda update-alias \
+            --function-name "${{ vars.LAMBDA_FUNCTION_NAME }}" \
+            --name "$ALIAS" \
+            --function-version "$NEW_VERSION" \
+            --routing-config '{"AdditionalVersionWeights":{}}' > /dev/null
+          echo "Promovida v$NEW_VERSION a 100% del tráfico en el alias '$ALIAS'"
+
+      - name: Rollback del alias si el canary falló
+        if: steps.creds.outputs.enabled == 'true' && vars.LAMBDA_FUNCTION_URL != '' && failure()
+        env:
+          ALIAS: ${{ vars.LAMBDA_ALIAS_NAME || 'live' }}
+          CURRENT_VERSION: ${{ steps.current.outputs.version }}
+        run: |
+          aws lambda update-alias \
+            --function-name "${{ vars.LAMBDA_FUNCTION_NAME }}" \
+            --name "$ALIAS" \
+            --function-version "$CURRENT_VERSION" \
+            --routing-config '{"AdditionalVersionWeights":{}}' > /dev/null
+          echo "::error::Canary falló; rollback aplicado a v$CURRENT_VERSION (100%) en el alias '$ALIAS'"
+
+      - name: Promover sin canary (sin Function URL configurada para verificar)
+        if: steps.creds.outputs.enabled == 'true' && vars.LAMBDA_FUNCTION_URL == ''
+        env:
+          ALIAS: ${{ vars.LAMBDA_ALIAS_NAME || 'live' }}
+          NEW_VERSION: ${{ steps.publish.outputs.version }}
+        run: |
+          set -euo pipefail
+          aws lambda update-alias \
+            --function-name "${{ vars.LAMBDA_FUNCTION_NAME }}" \
+            --name "$ALIAS" \
+            --function-version "$NEW_VERSION" \
+            --routing-config '{"AdditionalVersionWeights":{}}' > /dev/null
+          echo "::warning::LAMBDA_FUNCTION_URL no configurada: se promovió v$NEW_VERSION directo a 100% sin verificación de canary."

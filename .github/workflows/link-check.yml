@@ -1,13 +1,6 @@
 name: Link Check
 
-# Falla si se introduce un link http(s) externo en la documentación sin
-# pasar antes por el acortador propio de Linker (scripts/shorten_wiki_links.py).
-#
-# Complementa a ci.yml en vez de solaparse con él: ci.yml usa paths-ignore
-# para *no* correr typecheck/lint/tests en cambios que solo tocan
-# .md/.tex (no aplican y desperdician minutos de Actions); este workflow
-# hace exactamente lo opuesto — solo corre en esos cambios — y no necesita
-# Node ni npm ci, así que es rápido y barato.
+# Falla si se introduce un link http(s) externo en docs sin pasar antes por el acortador propio (scripts/shorten_wiki_links.py).
 
 on:
   push:

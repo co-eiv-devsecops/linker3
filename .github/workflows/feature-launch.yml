@@ -1,15 +1,7 @@
 name: Feature Launch
 
-# Activa/desactiva una funcionalidad ya desplegada, vía un flag de
-# LaunchDarkly — sin build, sin Docker, sin tocar la VM de producción.
-# Distinto de ci-cd-prod.yml: ese pipeline construye y despliega código
-# nuevo; este solo cambia la configuración de un flag que el código
-# desplegado ya sabe evaluar en tiempo real (streaming SDK).
-#
-# Requiere el secret LAUNCHDARKLY_API_TOKEN (token de la API de gestión
-# de LaunchDarkly, con permiso de escritura sobre flags — distinto del
-# LAUNCHDARKLY_SDK_KEY que usa la app en runtime). Configúralo en
-# Settings → Secrets and variables → Actions.
+# Activa/desactiva un flag de LaunchDarkly ya desplegado (no construye ni despliega código).
+# Requiere el secret LAUNCHDARKLY_API_TOKEN (token de gestión, distinto del LAUNCHDARKLY_SDK_KEY de runtime).
 
 on:
   workflow_dispatch:
