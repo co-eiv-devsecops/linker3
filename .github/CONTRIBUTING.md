@@ -131,12 +131,10 @@ python3 scripts/load_test.py --base-url https://green.internal:3000 \
   --min-concurrency-required 32   # falla el pipeline si no aguanta 32
 ```
 
-`.github/workflows/blue-green-deploy.yml` ya invoca ambos (job "2) QA en
-entorno inactivo") contra una instancia efímera que arranca en el propio
-runner con una DB descartable — no hay una VM "green" real provisionada
-por ese pipeline (es una simulación del patrón para el curso), así que la
-instancia efímera in-runner hace ese papel. Los resultados de ambos
-scripts (cada check, con su detalle) quedan en el log de ese step.
+`.github/workflows/blue-green-deploy-oci.yml` ya invoca ambos (job "2) QA en
+green") contra la instancia green real, vía túnel de OCI Bastion. Los
+resultados de ambos scripts (cada check, con su detalle) quedan en el log de
+ese step.
 
 ## 6. Git hooks (Husky)
 

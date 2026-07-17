@@ -53,15 +53,20 @@ cuando el valor real quede cargado en GitHub (Settings → Secrets and variables
 | [ ] `GRAFANA_WINDOW` | variable | Ventana de tiempo de la consulta (ej. `5m`) | `blue-green-deploy-oci.yml` |
 | [ ] `GRAFANA_WAIT_SECONDS` | variable | Espera antes de consultar métricas tras el switch | `blue-green-deploy-oci.yml` |
 
-## Faltantes — AWS Lambda (serverless)
+## AWS Lambda (serverless) — completo, blue/green validado end-to-end
 
-| Nombre | Tipo | Para qué sirve | Workflow |
-|---|---|---|---|
-| [ ] `AWS_ACCESS_KEY_ID` | secret | Credencial IAM para desplegar la Lambda | `serverless-deploy.yml` |
-| [ ] `AWS_SECRET_ACCESS_KEY` | secret | Credencial IAM para desplegar la Lambda | `serverless-deploy.yml` |
-| [ ] `AWS_REGION` | variable | Región de AWS donde vive la función | `serverless-deploy.yml` |
-| [ ] `LAMBDA_FUNCTION_NAME` | variable | Nombre de la función Lambda a actualizar | `serverless-deploy.yml` |
-| [ ] `LAMBDA_FUNCTION_URL` | variable | Function URL pública para el smoke test post-deploy | `serverless-deploy.yml` |
+| Nombre | Tipo | Valor |
+|---|---|---|
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | secret | usuario IAM `linker-serverless-deploy` |
+| `AWS_REGION` | variable | `us-east-1` |
+| `LAMBDA_FUNCTION_NAME` | variable | `linker-serverless` |
+| `LAMBDA_FUNCTION_URL` | variable | Function URL calificada al alias `live` |
+| `LAMBDA_ALIAS_NAME` | variable | `live` |
+
+El usuario `linker-serverless-deploy` tiene una policy inline adicional
+(`linker-serverless-cloudwatch-logs`) con `logs:CreateLogGroup` y afines,
+acotada al log group de esta función — necesaria para que Terraform gestione
+la retención de logs.
 
 ## Faltante — LaunchDarkly (feature flags)
 

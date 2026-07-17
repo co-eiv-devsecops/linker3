@@ -69,12 +69,12 @@ Si un hook te bloquea, arregla la causa — no uses `--no-verify`.
 |---|---|---|
 | `ci.yml` | push/PR en ramas de trabajo | typecheck, lint, tests de tu rama |
 | `ci-cd-dev.yml` | push/PR a `develop` | validación de integración del equipo |
-| `ci-cd-prod.yml` | push/tag a `main` | **desplegar código nuevo** a la VM de producción (lint→test→SAST→build→deploy→Newman) |
-| `blue-green-deploy.yml` | manual | **simulación** didáctica del patrón blue/green (sin infra real) |
-| `blue-green-deploy-oci.yml` | manual (`workflow_dispatch`) | **despliegue blue/green real**: crea VM green, QA vía bastion, aprobación, switchover de IP, gate de Grafana, rollback y limpieza automáticos |
+| `ci-cd-prod.yml` | push/tag a `main` | **desplegar código nuevo** a la VM de producción (quality-gate→build→deploy→Newman) |
+| `blue-green-deploy-oci.yml` | manual (`workflow_dispatch`) | **blue/green real en OCI**: crea VM green, QA vía bastion, aprobación, switchover vía Load Balancer compartido, gate de Grafana, rollback y limpieza automáticos |
+| `serverless-deploy.yml` | push a `main` | **blue/green real en Lambda**: publica versión, canary 10%, verifica, promueve o revierte el alias |
 | `feature-launch.yml` | manual | **lanzar/apagar una funcionalidad** ya desplegada vía flag de LaunchDarkly (no despliega código) |
 | `link-check.yml` | cambios en docs | exige que los links externos de la documentación pasen por Linker |
-| `codeql.yml` | reusable (lo llaman los CI/CD) | análisis SAST |
+| `quality-gate.yml` | reusable (lo llaman los CI/CD) | lint, tests, CodeQL y escaneo de seguridad — un solo lugar, sin duplicar entre dev/prod |
 
 Regla mental: *desplegar código* ≠ *lanzar funcionalidad*. El código se
 despliega apagado detrás de un flag y se lanza después con Feature Launch.
