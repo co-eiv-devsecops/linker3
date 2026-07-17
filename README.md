@@ -8,6 +8,40 @@ Producción: <https://3.n-la-c.app>
 
 Repositorio: <https://3.n-la-c.app/gh-linker3>
 
+## Objetivos de despliegue (URLs en vivo)
+
+El mismo artefacto corre en tres plataformas distintas de PROD:
+
+| Objetivo | URL | Blue/green |
+|---|---|---|
+| VM (OCI, principal) | <https://3.n-la-c.app> | `blue-green-deploy-oci.yml` (manual) |
+| Serverless (AWS Lambda) | `https://gd4edbefmk6eawclte542vj7ze0aqreu.lambda-url.us-east-1.on.aws` | ✅ Alias `live` con canary por peso, gate de Grafana y rollback |
+| VM (AWS EC2) | `http://18.211.208.218` | ✅ IP elástica reasignada entre blue/green, gate de Grafana y rollback |
+
+```mermaid
+flowchart LR
+    Dev[git push a main] --> Pkg[Un solo artefacto:\nsrc/ + ServerlessAdapter]
+
+    Pkg --> VM[VM OCI\nci-cd-prod.yml]
+    Pkg --> Lambda[AWS Lambda\nserverless-deploy.yml]
+    Pkg --> EC2[AWS EC2\nblue-green-deploy-aws.yml]
+
+    VM --> VMUrl[3.n-la-c.app]
+
+    Lambda --> Canary{canary 10%\nverificar}
+    Canary -- ok --> Promote[alias live: 100%]
+    Canary -- falla --> RollbackL[alias live: version anterior]
+    Promote --> LambdaUrl[Function URL]
+
+    EC2 --> Green[crear instancia green]
+    Green --> QA{QA + healthcheck}
+    QA -- ok --> Switch[mover IP elástica a green]
+    QA -- falla --> Discard[destruir green]
+    Switch --> Gate{gate Grafana}
+    Gate -- ok --> Cleanup[destruir blue anterior]
+    Gate -- falla --> RollbackE[IP elástica de vuelta a blue]
+```
+
 ## Integrantes
 
 - Diego Cardenas
@@ -207,7 +241,9 @@ sqlite3 linker.db < scripts/init-db.sql
 - Pipeline de desarrollo (rama develop): .github/workflows/ci-cd-dev.yml
 - Pipeline de producción (rama main y tags v*): .github/workflows/ci-cd-prod.yml
 - Pipeline de lanzamiento de funcionalidad (manual): .github/workflows/feature-launch.yml
-- Despliegue blue/green real en OCI (manual): .github/workflows/blue-green-deploy-oci.yml
+- Blue/green real en OCI (manual): .github/workflows/blue-green-deploy-oci.yml
+- Blue/green real en AWS EC2 (manual): .github/workflows/blue-green-deploy-aws.yml
+- Blue/green real en AWS Lambda (push a main o manual): .github/workflows/serverless-deploy.yml
 
 La guía de onboarding operativo (cómo contribuir, correr los scripts del repo,
 qué pipeline usar y por qué nunca se opera OCI a mano) está en
