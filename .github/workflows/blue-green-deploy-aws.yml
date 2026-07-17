@@ -1,0 +1,341 @@
+# Blue/green real en AWS EC2: crea green (Terraform), QA directo contra su
+# IP pública (sin bastion ni Load Balancer -- la subred default de AWS ya
+# asigna IP pública a cada instancia), aprobación manual, switchover
+# reasignando la IP elástica persistente, gate de Grafana, rollback y
+# limpieza. Mismo espíritu que blue-green-deploy-oci.yml, la versión más
+# simple posible de blue/green de VM en AWS.
+name: Blue/Green Deployment (AWS EC2 real)
+
+on:
+  workflow_dispatch:
+    inputs:
+      omitir_prueba_carga:
+        description: "Omitir la prueba de carga contra green (solo smoke test)"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+concurrency:
+  group: blue-green-aws
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  AWS_DEFAULT_REGION: ${{ vars.AWS_REGION }}
+
+jobs:
+  crear-green:
+    name: 1) Crear instancia green real (Terraform)
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.release.outputs.release_id }}
+      instance_id: ${{ steps.green.outputs.instance_id }}
+      public_ip: ${{ steps.green.outputs.public_ip }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Definir release id
+        id: release
+        run: echo "release_id=${GITHUB_SHA::7}-run${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+
+      - name: Terraform init
+        working-directory: infra/terraform-aws-ec2-bluegreen
+        run: terraform init -input=false
+
+      - name: Terraform apply (crear green, blue no se toca)
+        working-directory: infra/terraform-aws-ec2-bluegreen
+        env:
+          TF_VAR_release_id:        ${{ steps.release.outputs.release_id }}
+          TF_VAR_ami_id:             ${{ vars.AWS_EC2_AMI_ID }}
+          TF_VAR_eip_allocation_id:  ${{ vars.AWS_EIP_ALLOCATION_ID }}
+          TF_VAR_subnet_id:          ${{ vars.AWS_SUBNET_ID }}
+          TF_VAR_security_group_id:  ${{ vars.AWS_SECURITY_GROUP_ID }}
+          TF_VAR_base_url:           http://${{ vars.AWS_EIP_PUBLIC_IP }}
+          TF_VAR_aws_access_key_id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          TF_VAR_aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: terraform apply -input=false -auto-approve
+
+      - name: Exponer outputs de la instancia green
+        id: green
+        working-directory: infra/terraform-aws-ec2-bluegreen
+        run: |
+          {
+            echo "instance_id=$(terraform output -raw instance_id)"
+            echo "public_ip=$(terraform output -raw public_ip)"
+          } >> "$GITHUB_OUTPUT"
+          echo "Instancia green creada: $(terraform output -raw display_name) ($(terraform output -raw public_ip))"
+
+      - name: Guardar tfstate como artefacto de auditoría
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: tfstate-aws-green-${{ github.run_id }}
+          path: infra/terraform-aws-ec2-bluegreen/terraform.tfstate
+          retention-days: 5
+
+  qa-green:
+    name: 2) Healthcheck y pruebas funcionales contra green
+    runs-on: ubuntu-latest
+    needs: crear-green
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Esperar a que green responda 200 (cloud-init puede tardar ~1-2 min)
+        env:
+          PUBLIC_IP: ${{ needs.crear-green.outputs.public_ip }}
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf --max-time 5 "http://$PUBLIC_IP/health" > /dev/null && exit 0
+            sleep 10
+          done
+          echo "::error::green nunca respondió 200 en http://$PUBLIC_IP/health"
+          exit 1
+
+      - name: Smoke test funcional (crear, listar, redirigir)
+        env:
+          PUBLIC_IP: ${{ needs.crear-green.outputs.public_ip }}
+        run: python3 scripts/test_requests.py --base-url "http://$PUBLIC_IP" | tee qa-smoke.log
+
+      - name: Prueba de carga escalonada contra green
+        if: github.event.inputs.omitir_prueba_carga != 'true'
+        env:
+          PUBLIC_IP: ${{ needs.crear-green.outputs.public_ip }}
+        run: |
+          python3 scripts/load_test.py --base-url "http://$PUBLIC_IP" \
+            --start-concurrency 2 --max-concurrency 32 --requests-per-stage 20 | tee qa-carga.log
+
+      - name: Publicar resultados de QA como artefacto
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: qa-green-aws-${{ github.run_id }}
+          path: |
+            qa-smoke.log
+            qa-carga.log
+          if-no-files-found: ignore
+
+  aprobar-switchover:
+    name: 3) Aprobación manual para mover tráfico
+    runs-on: ubuntu-latest
+    needs: [qa-green, crear-green]
+    environment:
+      name: prod
+      url: http://${{ vars.AWS_EIP_PUBLIC_IP }}
+    steps:
+      - name: Sanidad — green no puede ser ya la instancia activa
+        run: |
+          if [ "${{ vars.AWS_EC2_INSTANCE_ID }}" = "${{ needs.crear-green.outputs.instance_id }}" ]; then
+            echo "::error::AWS_EC2_INSTANCE_ID ya es la green recién creada; estado inconsistente."
+            exit 1
+          fi
+
+      - name: Resumen para quien aprueba
+        run: |
+          echo "QA de green superado. Al aprobar, la IP elástica se mueve de:"
+          echo "  actual (blue): ${{ vars.AWS_EC2_INSTANCE_ID }}"
+          echo "  nueva (green): ${{ needs.crear-green.outputs.instance_id }} (${{ needs.crear-green.outputs.public_ip }})"
+
+  switchover:
+    name: 4) Switchover real (reasignar la IP elástica)
+    runs-on: ubuntu-latest
+    needs: [crear-green, aprobar-switchover]
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Mover la IP elástica hacia green
+        run: |
+          aws ec2 associate-address \
+            --instance-id "${{ needs.crear-green.outputs.instance_id }}" \
+            --allocation-id "${{ vars.AWS_EIP_ALLOCATION_ID }}" \
+            --allow-reassociation
+
+      - name: Verificar que el tráfico llega a green
+        run: |
+          for i in $(seq 1 15); do
+            curl -sf --max-time 5 "http://${{ vars.AWS_EIP_PUBLIC_IP }}/health" > /dev/null && exit 0
+            sleep 5
+          done
+          echo "::error::La IP elástica no sirvió tráfico sano tras el switchover"
+          exit 1
+
+  gate-grafana:
+    name: 5) Gate post-despliegue con métricas de Grafana
+    runs-on: ubuntu-latest
+    needs: switchover
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verificar configuración de Grafana
+        id: config
+        env:
+          GRAFANA_URL: ${{ vars.GRAFANA_URL }}
+          GRAFANA_API_TOKEN: ${{ secrets.GRAFANA_API_TOKEN }}
+        run: |
+          if [ -z "$GRAFANA_URL" ] || [ -z "$GRAFANA_API_TOKEN" ]; then
+            echo "configurado=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Gate de Grafana OMITIDO: configure vars.GRAFANA_URL, vars.GRAFANA_DATASOURCE_UID y secrets.GRAFANA_API_TOKEN para activarlo."
+          else
+            echo "configurado=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Esperar ventana de observación post-switchover
+        if: steps.config.outputs.configurado == 'true'
+        run: sleep "${{ vars.GRAFANA_WAIT_SECONDS || '60' }}"
+
+      - name: Consultar métricas contra umbrales
+        if: steps.config.outputs.configurado == 'true'
+        env:
+          GRAFANA_URL: ${{ vars.GRAFANA_URL }}
+          GRAFANA_DATASOURCE_UID: ${{ vars.GRAFANA_DATASOURCE_UID }}
+          GRAFANA_API_TOKEN: ${{ secrets.GRAFANA_API_TOKEN }}
+        run: |
+          EXTRA_ARGS=()
+          if [ -n "${{ vars.GRAFANA_P95_QUERY }}" ]; then
+            EXTRA_ARGS+=(--p95-query "${{ vars.GRAFANA_P95_QUERY }}")
+          fi
+          if [ -n "${{ vars.GRAFANA_ERROR_RATE_QUERY }}" ]; then
+            EXTRA_ARGS+=(--error-rate-query "${{ vars.GRAFANA_ERROR_RATE_QUERY }}" \
+                         --max-error-rate "${{ vars.GRAFANA_MAX_ERROR_RATE || '0.05' }}")
+          fi
+          python3 scripts/check_grafana.py \
+            --window "${{ vars.GRAFANA_WINDOW || '10m' }}" \
+            --max-p95-ms "${{ vars.GRAFANA_MAX_P95_MS || '500' }}" \
+            "${EXTRA_ARGS[@]}"
+
+  rollback-a-blue:
+    name: 6) Rollback automático si el gate de Grafana falla
+    runs-on: ubuntu-latest
+    needs: [switchover, gate-grafana]
+    if: always() && needs.switchover.result == 'success' && needs.gate-grafana.result == 'failure'
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Devolver la IP elástica a blue
+        run: |
+          aws ec2 associate-address \
+            --instance-id "${{ vars.AWS_EC2_INSTANCE_ID }}" \
+            --allocation-id "${{ vars.AWS_EIP_ALLOCATION_ID }}" \
+            --allow-reassociation
+          echo "::error::Gate de Grafana falló tras el switchover; rollback aplicado a ${{ vars.AWS_EC2_INSTANCE_ID }}"
+
+  limpiar:
+    name: 7) Limpieza — promover green o destruir la instancia sin tráfico
+    runs-on: ubuntu-latest
+    needs:
+      - crear-green
+      - switchover
+      - gate-grafana
+      - rollback-a-blue
+    if: always() && needs.crear-green.result == 'success'
+    permissions:
+      contents: read
+      actions: write
+    env:
+      BLUE_INSTANCE_ID:  ${{ vars.AWS_EC2_INSTANCE_ID }}
+      GREEN_INSTANCE_ID: ${{ needs.crear-green.outputs.instance_id }}
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Decidir resultado del despliegue
+        id: resultado
+        run: |
+          if [ "${{ needs.switchover.result }}" = "success" ] && [ "${{ needs.gate-grafana.result }}" = "success" ]; then
+            echo "exitoso=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exitoso=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Promover AWS_EC2_INSTANCE_ID a green (despliegue exitoso)
+        if: steps.resultado.outputs.exitoso == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          if gh variable set AWS_EC2_INSTANCE_ID --body "$GREEN_INSTANCE_ID" --repo "${{ github.repository }}"; then
+            echo "AWS_EC2_INSTANCE_ID actualizado a green: $GREEN_INSTANCE_ID"
+          else
+            echo "::warning::No se pudo actualizar AWS_EC2_INSTANCE_ID automáticamente. Actualícela manualmente: gh variable set AWS_EC2_INSTANCE_ID --body \"$GREEN_INSTANCE_ID\" --repo ${{ github.repository }}"
+          fi
+
+      - name: Terminar instancia sin tráfico (nunca la que tiene la IP elástica)
+        run: |
+          if [ "${{ steps.resultado.outputs.exitoso }}" = "true" ]; then
+            VICTIMA="$BLUE_INSTANCE_ID"
+            echo "Despliegue exitoso: se destruye la blue anterior ($VICTIMA)."
+          else
+            VICTIMA="$GREEN_INSTANCE_ID"
+            echo "Despliegue fallido/abortado: se destruye la green ($VICTIMA)."
+          fi
+
+          ACTIVE_ID="$(aws ec2 describe-addresses \
+            --allocation-ids "${{ vars.AWS_EIP_ALLOCATION_ID }}" \
+            --query 'Addresses[0].InstanceId' --output text)"
+          if [ "$VICTIMA" = "$ACTIVE_ID" ]; then
+            echo "::error::BLOQUEADO: $VICTIMA tiene la IP elástica asociada ahora mismo. No se termina."
+            exit 1
+          fi
+
+          STATE="$(aws ec2 describe-instances --instance-ids "$VICTIMA" \
+            --query 'Reservations[0].Instances[0].State.Name' --output text 2>/dev/null || echo not-found)"
+          case "$STATE" in
+            terminated|shutting-down|not-found)
+              echo "La instancia $VICTIMA ya está en estado '$STATE'; nada que hacer."
+              ;;
+            *)
+              aws ec2 terminate-instances --instance-ids "$VICTIMA"
+              echo "Instancia $VICTIMA terminada."
+              ;;
+          esac
+
+  resumen:
+    name: Resumen del despliegue
+    runs-on: ubuntu-latest
+    needs:
+      - crear-green
+      - qa-green
+      - aprobar-switchover
+      - switchover
+      - gate-grafana
+      - rollback-a-blue
+      - limpiar
+    if: always()
+    steps:
+      - name: Mostrar resumen
+        run: |
+          echo "Blue/Green real en AWS EC2 — release ${{ needs.crear-green.outputs.release_id }}"
+          echo "  Green creada:  ${{ needs.crear-green.outputs.instance_id }} -> ${{ needs.crear-green.result }}"
+          echo "  QA en green:   ${{ needs.qa-green.result }}"
+          echo "  Aprobación:    ${{ needs.aprobar-switchover.result }}"
+          echo "  Switchover:    ${{ needs.switchover.result }}"
+          echo "  Gate Grafana:  ${{ needs.gate-grafana.result }}"
+          echo "  Rollback:      ${{ needs.rollback-a-blue.result }}"
+          echo "  Limpieza:      ${{ needs.limpiar.result }}"

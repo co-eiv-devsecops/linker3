@@ -1,27 +1,7 @@
-# Despliegue Blue/Green REAL en OCI (issues #101–#104 y #106).
-#
-# A diferencia de blue-green-deploy.yml (simulación didáctica del patrón),
-# este workflow crea infraestructura real:
-#   1. crear-green         — Terraform crea la instancia efímera linker-green-<release>
-#   2. qa-green            — healthcheck + pruebas funcionales/carga vía OCI Bastion
-#   3. aprobar-switchover  — aprobación manual (environment prod)
-#   4. blue-green-lb-deploy — registra green en el Load Balancer compartido del
-#      curso (backend set linker-3), corre A/B 90/10 y promueve a 100/0
-#   5. gate-grafana        — verifica métricas post-promoción contra umbrales
-#   6. rollback-a-blue     — si el gate de Grafana falla tras promover, rollback
-#      vía el mismo Load Balancer
-#   7. limpiar             — destruye la instancia que quedó sin tráfico y
-#      actualiza OCI_INSTANCE_OCID a green si el despliegue fue exitoso
-#
-# El tráfico NO se mueve con una IP pública reservada por VM: las instancias
-# se crean sin IP pública (ver infra/terraform-blue-green) y el único punto
-# de entrada es el Load Balancer compartido `lb-bog-lz-prod-01`, igual que
-# hacen linker1/linker2. El switchover de bajo nivel (staged backend -> A/B ->
-# promote/rollback) lo hace la reusable workflow vendorizada
-# `.github/workflows/oci-lb-bluegreen-ab.yml` (copiada de linker1, que a su
-# vez corrigió un bug real de la versión original en material-curso).
-# 0 operaciones manuales en la consola de OCI: todo va por Terraform/OCI CLI.
-# Configuración (vars/secrets del repo): ver docs/operaciones.md.
+# Blue/green real en OCI: crea green (Terraform), QA vía bastion, aprobación
+# manual, switchover A/B vía el Load Balancer compartido del curso
+# (oci-lb-bluegreen-ab.yml), gate de Grafana, rollback y limpieza. Detalle en
+# docs/operaciones.md.
 name: Blue/Green Deployment (OCI real)
 
 on:
@@ -218,9 +198,7 @@ jobs:
       backend-set-name: ${{ vars.OCI_LB_LINKER_BACKEND }}
       new-instance-id: ${{ needs.crear-green.outputs.instance_id }}
       current-instance-id: ${{ vars.OCI_INSTANCE_OCID }}
-      # nginx en la VM reenvía a la app en este puerto (ver cloud-init.yaml);
-      # el backend set linker-3 del LB compartido está configurado para
-      # revisar salud directo contra este puerto.
+      # nginx reenvía a este puerto (cloud-init.yaml); el backend set del LB revisa salud ahí.
       backend-port: '8080'
       health-check-path: /health
       health-wait-attempts: '40'
@@ -307,8 +285,7 @@ jobs:
     if: always() && needs.crear-green.result == 'success'
     permissions:
       contents: read
-      # requerido para que GITHUB_TOKEN pueda actualizar OCI_INSTANCE_OCID.
-      actions: write
+      actions: write # para que GITHUB_TOKEN pueda actualizar OCI_INSTANCE_OCID
     env:
       OCI_CLI_USER: ${{ secrets.OCI_CLI_USER }}
       OCI_CLI_TENANCY: ${{ secrets.OCI_CLI_TENANCY }}
@@ -346,9 +323,7 @@ jobs:
           if gh variable set OCI_INSTANCE_OCID --body "$GREEN_OCID" --repo "${{ github.repository }}"; then
             echo "OCI_INSTANCE_OCID actualizado a green: $GREEN_OCID"
           else
-            # La org puede bloquear la escritura de variables vía GITHUB_TOKEN
-            # (visto documentado en linker1/DEPLOYMENT.md); el despliegue ya
-            # tuvo éxito, así que se avisa en vez de fallar todo el job.
+            # La org puede bloquear la escritura de variables vía GITHUB_TOKEN; el despliegue ya tuvo éxito, no se falla el job por esto.
             echo "::warning::No se pudo actualizar OCI_INSTANCE_OCID automáticamente. Actualícela manualmente: gh variable set OCI_INSTANCE_OCID --body \"$GREEN_OCID\" --repo ${{ github.repository }}"
           fi
 

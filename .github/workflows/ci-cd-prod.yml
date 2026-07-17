@@ -17,101 +17,19 @@ env:
   PROD_URL: https://3.n-la-c.app
 
 jobs:
-  lint:
-    name: Lint y calidad de código
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-
-      - run: npm ci
-
-      - name: Verificar tipos (tsc --noEmit)
-        run: npm run typecheck
-
-      - name: Análisis de estilo (Biome)
-        run: npx biome ci .
-
-  test:
-    name: Pruebas unitarias
-    runs-on: ubuntu-latest
-    needs: lint
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-
-      - run: npm ci
-
-      - name: Ejecutar tests
-        run: npm test
-
-      - name: Reporte de cobertura (bloquea si < 85%)
-        run: npm run test:coverage:check | tee coverage.txt
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: coverage-report-prod-${{ github.sha }}
-          path: coverage.txt
-
-  codeql:
-    name: Análisis SAST (CodeQL)
-    needs: lint
-    uses: ./.github/workflows/codeql.yml
+  quality-gate:
+    uses: ./.github/workflows/quality-gate.yml
+    with:
+      artifact-suffix: prod
     permissions:
       contents: read
       security-events: write
       actions: read
 
-  security-scan:
-    name: Escaneo de seguridad
-    runs-on: ubuntu-latest
-    needs: [lint, codeql]
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-
-      - run: npm ci
-
-      - name: Auditoría de dependencias (bloquea en vulnerabilidades altas)
-        run: npm audit --audit-level=high
-
-      - name: Instalar gitleaks
-        env:
-          GITLEAKS_VERSION: 8.30.1
-        run: |
-          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o gitleaks.tar.gz
-          tar -xzf gitleaks.tar.gz gitleaks
-          sudo mv gitleaks /usr/local/bin/gitleaks
-          gitleaks version
-
-      - name: Escaneo de secretos (gitleaks)
-        run: gitleaks detect --source . --config .gitleaks.toml --verbose --redact --exit-code 1
-
-      - name: Confirmar resultado del análisis SAST (CodeQL)
-        run: echo "Resultado CodeQL (job 'codeql') = ${{ needs.codeql.result }}"
-
-      - name: Validar cumplimiento (gate bloqueante)
-        run: |
-          echo "El job 'codeql' ya bloquea el pipeline si hay hallazgos de severidad alta o crítica (needs: codeql)."
-
   build:
     name: Build y empaquetado
     runs-on: ubuntu-latest
-    needs: [test, security-scan]
+    needs: quality-gate
     steps:
       - uses: actions/checkout@v7
 

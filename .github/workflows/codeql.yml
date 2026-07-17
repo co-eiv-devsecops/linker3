@@ -4,8 +4,7 @@ on:
   workflow_call:
   workflow_dispatch:
   schedule:
-    # Escaneo periódico independiente de los pushes/PRs (lunes 06:00 UTC)
-    - cron: "0 6 * * 1"
+    - cron: "0 6 * * 1" # escaneo semanal independiente de pushes/PRs
 
 permissions:
   contents: read
@@ -36,11 +35,7 @@ jobs:
         with:
           category: "/language:${{ matrix.language }}"
           output: sarif-results
-          # GitHub Advanced Security no está habilitado en este repo privado
-          # (la subida a la pestaña Security devuelve 403 "Code Security must
-          # be enabled"), así que el resultado se simula: no se sube y en su
-          # lugar queda disponible como artefacto descargable del run.
-          upload: false
+          upload: false # GitHub Advanced Security no está habilitado; el SARIF queda como artefacto descargable
 
       - uses: actions/upload-artifact@v7
         with:
