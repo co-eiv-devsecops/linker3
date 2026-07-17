@@ -15,22 +15,29 @@ cuando el valor real quede cargado en GitHub (Settings → Secrets and variables
 | `OCI_CLI_FINGERPRINT` | secret | `blue-green-deploy-oci.yml`, `ci-cd-prod.yml` |
 | `OCI_CLI_KEY_CONTENT` | secret | `blue-green-deploy-oci.yml`, `ci-cd-prod.yml` |
 | `OCI_CLI_USER` | secret | `blue-green-deploy-oci.yml`, `ci-cd-prod.yml` |
-| `OCI_COMPARTMENT_OCID` | variable | `blue-green-deploy-oci.yml` (recién corregido, antes estaba como `OCI_COMPARTMENT_ID`) |
-| `OCI_INSTANCE_OCID` | variable | `ci-cd-prod.yml` |
+| `OCI_COMPARTMENT_OCID` | variable | `blue-green-deploy-oci.yml` (recién corregido, antes estaba como `OCI_COMPARTMENT_ID`; pendiente re-verificar que apunte a `cmp-lz-prod-linker-3` y no al tenancy — ver nota abajo) |
+| `OCI_INSTANCE_OCID` | variable | `ci-cd-prod.yml`, `blue-green-deploy-oci.yml` |
+| `OCI_CLI_REGION` | variable | `sa-bogota-1` — ya cargada |
+| `OCI_BASTION_OCID` | variable | `ocid1.bastion.oc1.sa-bogota-1.amaaaaaalthnxiyayojugy7kxhsra6vkupcj4xftydrfev5ryu26titzzu3q` (`bstlinkerprojects`) — ya cargada |
+| `OCI_AVAILABILITY_DOMAIN` | variable | `gyPa:SA-BOGOTA-1-AD-1` — ya cargada |
+| `OCI_SUBNET_OCID` | variable | `ocid1.subnet.oc1.sa-bogota-1.aaaaaaaabglji7muwft7bknjdgnqubvjdrypqqxjd5ypwiz7mqluqpubqzbq` (`sn-bog-lz-prod-linker-3`) — ya cargada |
+| `OCI_LB_OCID` | variable | `ocid1.loadbalancer.oc1.sa-bogota-1.aaaaaaaapj2wxt5msfusk3jb4vymhczobtka5cgxfftvdyauguk4f4w7lqpa` (`lb-bog-lz-prod-01`, compartido con linker1/2/4/5) — ya cargada |
+| `OCI_LB_LINKER_BACKEND` | variable | `linker-3` — ya cargada |
+
+> **Nota de arquitectura**: se migró de "IP pública reservada por VM" (diseño
+> original de este repo) a "Load Balancer compartido + backend set", igual
+> que linker1/linker2 — las VMs del curso no tienen IP pública propia
+> (`assign_public_ip = false`). `OCI_RESERVED_PUBLIC_IP_OCID`,
+> `TLS_CERTBOT_EMAIL` y `BLUE_GREEN_VERIFY_URL` ya no se usan y se retiraron
+> de `blue-green-deploy-oci.yml`.
 
 ## Faltantes — despliegue OCI (VM, blue/green)
 
 | Nombre | Tipo | Para qué sirve | Workflow |
 |---|---|---|---|
 | [ ] `OCI_CLI_TENANCY` | secret | OCID del tenancy de Oracle Cloud, requerido por el OCI CLI | `blue-green-deploy-oci.yml`, `ci-cd-prod.yml` |
-| [ ] `OCI_CLI_REGION` | variable | Región de OCI (ej. `sa-bogota-1`) | `blue-green-deploy-oci.yml`, `ci-cd-prod.yml` |
-| [ ] `OCI_BASTION_OCID` | variable | OCID del Bastion usado para SSH administrado | `blue-green-deploy-oci.yml`, `ci-cd-prod.yml` |
-| [ ] `OCI_AVAILABILITY_DOMAIN` | variable | Dominio de disponibilidad para crear instancias | `blue-green-deploy-oci.yml` |
-| [ ] `OCI_IMAGE_OCID` | variable | Imagen base (Ubuntu) para la VM | `blue-green-deploy-oci.yml` |
-| [ ] `OCI_SUBNET_OCID` | variable | Subred de la VPC/VCN | `blue-green-deploy-oci.yml` |
-| [ ] `OCI_RESERVED_PUBLIC_IP_OCID` | variable | IP pública reservada para el switch blue/green | `blue-green-deploy-oci.yml` |
-| [ ] `TLS_CERTBOT_EMAIL` | variable | Email para el registro de certificados Let's Encrypt | `blue-green-deploy-oci.yml` |
-| [ ] `BLUE_GREEN_VERIFY_URL` | variable | URL pública contra la que se valida el despliegue tras el switch | `blue-green-deploy-oci.yml` |
+| [ ] `OCI_IMAGE_OCID` | variable | Imagen **Ubuntu 22.04+** (no la Oracle Linux 9 que sale por defecto al crear instancia) | `blue-green-deploy-oci.yml` |
+| [ ] Confirmar `OCI_COMPARTMENT_OCID` | variable | Debería ser el OCID de `cmp-lz-prod-linker-3` (Identity & Security → Compartments), no el del tenancy | `blue-green-deploy-oci.yml` |
 
 ## Faltantes — observabilidad (Grafana, gate post-deploy)
 

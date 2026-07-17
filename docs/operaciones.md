@@ -18,7 +18,7 @@ Oracle Cloud. Toda operación pasa por código versionado en este repo:
 | Crear la VM de producción (primera vez) | `infra/terraform-oracle/` (`terraform apply`) |
 | Desplegar una nueva versión del código | Pipeline **CI/CD - Prod** (push/merge a `main`) o **Blue/Green Deployment (OCI real)** |
 | Crear/destruir la instancia green del blue/green | Pipeline `blue-green-deploy-oci.yml` (Terraform + OCI CLI, automático) |
-| Mover el tráfico de producción (switchover/rollback) | El mismo pipeline (reasigna la IP pública reservada vía OCI CLI) |
+| Mover el tráfico de producción (switchover/rollback) | El mismo pipeline (registra/promueve backends en el Load Balancer compartido `lb-bog-lz-prod-01`) |
 | Activar/desactivar una funcionalidad ya desplegada | Pipeline **Feature Launch** (flag de LaunchDarkly, no toca la VM) |
 | Entrar a una VM (debug puntual) | OCI Bastion vía scripts (`infra/scripts/blue-green/run_remote.sh`), nunca abriendo puertos a mano |
 
@@ -94,19 +94,24 @@ IPs: todo sale de las vars/secrets del repo (sección 5).
    al final: producción nunca se enteró.
 3. **Aprobación manual** — environment `prod` de GitHub; un revisor aprueba
    el movimiento de tráfico.
-4. **Switchover real** — la IP pública reservada de producción (la que
-   resuelve el DNS) se reasigna a la private IP de green vía OCI CLI, y se
-   verifica en el plano de control (OCI confirma la asignación) y en el de
-   datos (la URL pública responde 200).
+4. **Switchover real vía Load Balancer compartido** — las VMs no tienen IP
+   pública propia (`assign_public_ip = false`); el único punto de entrada es
+   el Load Balancer del curso (`lb-bog-lz-prod-01`), con un backend set por
+   proyecto (`linker-3` para este repo). El pipeline delega el ciclo completo
+   a la reusable workflow vendorizada `oci-lb-bluegreen-ab.yml`: registra
+   green como backend drenado, espera que quede sano, abre A/B 90/10, observa,
+   y promueve a 100/0 — todo contra el puerto 8080 en el que escucha la app
+   (ver `cloud-init.yaml`).
 5. **Gate de Grafana** — `scripts/check_grafana.py` consulta métricas
    post-despliegue (latencia p95, opcionalmente error rate) contra umbrales
    configurables; si se exceden, el pipeline falla.
-6. **Rollback automático** — si el switchover o el gate fallan, la IP vuelve
-   a blue y se verifica de nuevo.
+6. **Rollback automático** — si el A/B o el gate de Grafana fallan, la misma
+   reusable workflow restaura el 100% del tráfico a blue en el Load Balancer
+   y (opcionalmente) retira el backend de green.
 7. **Limpieza** — se destruye la instancia que quedó **sin** tráfico (blue si
-   todo salió bien; green si hubo fallo). Antes de terminar cualquier VM se
-   vuelve a consultar quién tiene el tráfico: el script se niega a destruir
-   la instancia activa, pase lo que pase.
+   todo salió bien, y entonces `OCI_INSTANCE_OCID` se actualiza a green; green
+   si hubo fallo/rollback). El script se niega a destruir la instancia activa
+   actual, pase lo que pase.
 
 ## 4. Scripts del repositorio
 
@@ -194,15 +199,14 @@ requiere tocar nada.
 | Variable | Qué es | ¿Requerida? |
 |---|---|---|
 | `OCI_CLI_REGION` | Región (p. ej. `sa-bogota-1`) | Sí |
-| `OCI_COMPARTMENT_OCID` | Compartment de las instancias | Sí |
-| `OCI_SUBNET_OCID` | Subnet donde nacen las VMs | Sí |
+| `OCI_COMPARTMENT_OCID` | Compartment de las instancias (`cmp-lz-prod-linker-3`) | Sí |
+| `OCI_SUBNET_OCID` | Subnet donde nacen las VMs (`sn-bog-lz-prod-linker-3`) | Sí |
 | `OCI_BASTION_OCID` | Bastion para túneles de QA/SSH | Sí |
-| `OCI_RESERVED_PUBLIC_IP_OCID` | IP pública reservada de producción (el switchover la mueve) | Sí |
+| `OCI_LB_OCID` | OCID del Load Balancer compartido del curso (`lb-bog-lz-prod-01`) — el switchover registra/promueve backends ahí en vez de mover una IP pública reservada | Sí |
+| `OCI_LB_LINKER_BACKEND` | Nombre del backend set de linker3 en ese LB (`linker-3`) | Sí |
 | `DEPLOYMENT_PUBLIC_KEY` | Llave SSH pública inyectada a las VMs | Sí |
 | `OCI_AVAILABILITY_DOMAIN` | AD de la instancia | No (default del módulo) |
 | `OCI_IMAGE_OCID` | Imagen Ubuntu | No (default del módulo) |
-| `BLUE_GREEN_VERIFY_URL` | URL a verificar post-switchover | No (default `https://3.n-la-c.app/health`) |
-| `TLS_CERTBOT_EMAIL` | Si se define, el pipeline emite el certificado TLS en green con certbot tras el switchover | No |
 | `GRAFANA_URL` | URL base de Grafana | Para el gate |
 | `GRAFANA_DATASOURCE_UID` | UID del datasource Prometheus | Para el gate |
 | `GRAFANA_WINDOW` | Ventana de evaluación | No (default `10m`) |
