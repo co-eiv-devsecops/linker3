@@ -78,21 +78,28 @@ export function sendNoContent(res: HttpResponse): void {
 }
 
 /**
- * Writes a header-only response with no body, for routes (like `HEAD`
- * requests) where the HTTP spec forbids a response body.
+ * Writes a header-only response, optionally with a plain-text body (e.g.
+ * for `HEAD /:code`, which returns the destination URL as metadata in the
+ * body in addition to the `Location` header, per the project's rubric).
  *
  * @param res - Response to write to.
  * @param status - HTTP status code.
  * @param extraHeaders - Additional headers merged in on top of the
  * defaults (e.g. `Location` to carry a short link's destination).
+ * @param body - Optional plain-text body to send.
  */
 export function sendHead(
   res: HttpResponse,
   status: number,
-  extraHeaders: Record<string, string> = {}
+  extraHeaders: Record<string, string> = {},
+  body?: string
 ): void {
-  res.writeHead(status, { ...SECURITY_HEADERS, ...extraHeaders });
-  res.end();
+  res.writeHead(status, {
+    ...(body !== undefined ? { "Content-Type": "text/plain" } : {}),
+    ...SECURITY_HEADERS,
+    ...extraHeaders,
+  });
+  res.end(body);
 }
 
 /**

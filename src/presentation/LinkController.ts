@@ -73,16 +73,16 @@ export class LinkController {
 
   /**
    * Handles `HEAD /:code`: looks up a short code's destination without
-   * redirecting or incrementing its visit counter, returning it in the
-   * `Location` header of a 200 response (never a 3xx, so clients don't
-   * auto-follow it).
+   * redirecting or incrementing its visit counter. Returns metadata about
+   * the short link — the destination URL — both in the `Location` header
+   * and as the response body (never a 3xx, so clients don't auto-follow it).
    *
    * @param code - Short code extracted from the request path.
-   * @param res - Response to write the metadata headers to.
+   * @param res - Response to write the metadata to.
    * @throws {NotFoundError} If no link exists for `code`.
    */
   head(code: string, res: HttpResponse): void {
     const link = this.service.peek(code);
-    sendHead(res, 200, { Location: link.url });
+    sendHead(res, 200, { Location: link.url }, link.url);
   }
 }
