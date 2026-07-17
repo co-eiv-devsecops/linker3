@@ -41,7 +41,7 @@ write_files:
           server_name _;
 
           location / {
-              proxy_pass http://localhost:3000;
+              proxy_pass http://localhost:8080;
               proxy_http_version 1.1;
               proxy_set_header Host              $host;
               proxy_set_header X-Real-IP         $remote_addr;
@@ -70,7 +70,7 @@ write_files:
       fi
       chown -R ubuntu:ubuntu "$APP_DIR"
 
-      printf "PORT=3000\nBASE_URL=%s\n" "$BASE_URL" > "$APP_DIR/.env"
+      printf "PORT=8080\nBASE_URL=%s\n" "$BASE_URL" > "$APP_DIR/.env"
       chown ubuntu:ubuntu "$APP_DIR/.env"
       chmod 600 "$APP_DIR/.env"
 
@@ -87,4 +87,12 @@ write_files:
       # Ejecutar manualmente tras el primer arranque: certbot --nginx -d 3.n-la-c.app
 
 runcmd:
+  # Las imagenes Ubuntu de OCI traen una cadena INPUT de iptables que rechaza
+  # todo el trafico entrante salvo SSH. Sin esto, el health-checker del Load
+  # Balancer compartido del curso reporta "Connection failed" aunque la app
+  # este arriba (un curl local funciona porque loopback si esta permitido,
+  # lo que hace este problema dificil de detectar). Mismo fix que linker1.
+  - iptables -I INPUT -p tcp -m tcp --dport 8080 -m state --state NEW -j ACCEPT
+  - iptables -I INPUT -p tcp -m tcp --dport 80 -m state --state NEW -j ACCEPT
+  - bash -c 'netfilter-persistent save || iptables-save > /etc/iptables/rules.v4 || true'
   - bash /opt/provision.sh
