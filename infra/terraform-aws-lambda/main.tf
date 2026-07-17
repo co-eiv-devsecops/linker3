@@ -19,6 +19,11 @@ resource "aws_iam_role_policy_attachment" "basic_logs" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+resource "aws_iam_role_policy_attachment" "xray_write" {
+  role       = aws_iam_role.linker.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
+}
+
 resource "aws_cloudwatch_log_group" "linker" {
   name              = "/aws/lambda/${var.function_name}"
   retention_in_days = var.log_retention_days
@@ -41,13 +46,21 @@ resource "aws_lambda_function" "linker" {
     variables = {
       # El filesystem de Lambda es de solo lectura salvo /tmp: la base SQLite
       # vive ahí y es efímera por instancia (ver docs/serverless.md).
-      DB_PATH  = "/tmp/linker.db"
-      BASE_URL = var.base_url != "" ? var.base_url : "http://localhost:3000"
+      DB_PATH                     = "/tmp/linker.db"
+      BASE_URL                    = var.base_url != "" ? var.base_url : "http://localhost:3000"
+      OTEL_SERVICE_NAME           = var.otel_service_name
+      OTEL_EXPORTER_OTLP_ENDPOINT = var.otel_exporter_otlp_endpoint
+      OTEL_EXPORTER_OTLP_HEADERS  = var.otel_exporter_otlp_headers
     }
+  }
+
+  tracing_config {
+    mode = "Active"
   }
 
   depends_on = [
     aws_iam_role_policy_attachment.basic_logs,
+    aws_iam_role_policy_attachment.xray_write,
     aws_cloudwatch_log_group.linker,
   ]
 }

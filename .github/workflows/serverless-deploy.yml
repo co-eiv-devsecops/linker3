@@ -162,7 +162,7 @@ jobs:
           echo "Promovida v$NEW_VERSION a 100% del tráfico en el alias '$ALIAS'"
 
       - name: Rollback del alias si el canary falló
-        if: steps.creds.outputs.enabled == 'true' && vars.LAMBDA_FUNCTION_URL != '' && failure()
+        if: steps.creds.outputs.enabled == 'true' && vars.LAMBDA_FUNCTION_URL != '' && steps.canary.outcome == 'failure'
         env:
           ALIAS: ${{ vars.LAMBDA_ALIAS_NAME || 'live' }}
           CURRENT_VERSION: ${{ steps.current.outputs.version }}
@@ -173,6 +173,66 @@ jobs:
             --function-version "$CURRENT_VERSION" \
             --routing-config '{"AdditionalVersionWeights":{}}' > /dev/null
           echo "::error::Canary falló; rollback aplicado a v$CURRENT_VERSION (100%) en el alias '$ALIAS'"
+
+      - uses: actions/setup-python@v5
+        if: steps.creds.outputs.enabled == 'true' && vars.LAMBDA_FUNCTION_URL != ''
+        with:
+          python-version: "3.12"
+
+      - name: Verificar configuración de Grafana
+        id: grafana-config
+        if: steps.creds.outputs.enabled == 'true' && vars.LAMBDA_FUNCTION_URL != ''
+        env:
+          GRAFANA_URL: ${{ vars.GRAFANA_URL }}
+          GRAFANA_API_TOKEN: ${{ secrets.GRAFANA_API_TOKEN }}
+        run: |
+          if [ -z "$GRAFANA_URL" ] || [ -z "$GRAFANA_API_TOKEN" ]; then
+            echo "configurado=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Gate de Grafana OMITIDO: configure vars.GRAFANA_URL, vars.GRAFANA_DATASOURCE_UID y secrets.GRAFANA_API_TOKEN para activarlo."
+          else
+            echo "configurado=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Esperar ventana de observación post-promoción
+        if: steps.grafana-config.outputs.configurado == 'true'
+        run: |
+          ESPERA="${{ vars.GRAFANA_WAIT_SECONDS || '60' }}"
+          echo "Dejando correr tráfico real ${ESPERA}s antes de evaluar métricas..."
+          sleep "$ESPERA"
+
+      - name: Gate de Grafana post-promoción
+        id: grafana-gate
+        if: steps.grafana-config.outputs.configurado == 'true'
+        env:
+          GRAFANA_URL: ${{ vars.GRAFANA_URL }}
+          GRAFANA_DATASOURCE_UID: ${{ vars.GRAFANA_DATASOURCE_UID }}
+          GRAFANA_API_TOKEN: ${{ secrets.GRAFANA_API_TOKEN }}
+        run: |
+          EXTRA_ARGS=()
+          if [ -n "${{ vars.GRAFANA_P95_QUERY }}" ]; then
+            EXTRA_ARGS+=(--p95-query "${{ vars.GRAFANA_P95_QUERY }}")
+          fi
+          if [ -n "${{ vars.GRAFANA_ERROR_RATE_QUERY }}" ]; then
+            EXTRA_ARGS+=(--error-rate-query "${{ vars.GRAFANA_ERROR_RATE_QUERY }}" \
+                         --max-error-rate "${{ vars.GRAFANA_MAX_ERROR_RATE || '0.05' }}")
+          fi
+          python3 scripts/check_grafana.py \
+            --window "${{ vars.GRAFANA_WINDOW || '10m' }}" \
+            --max-p95-ms "${{ vars.GRAFANA_MAX_P95_MS || '500' }}" \
+            "${EXTRA_ARGS[@]}"
+
+      - name: Rollback del alias si el gate de Grafana falló
+        if: steps.grafana-config.outputs.configurado == 'true' && steps.grafana-gate.outcome == 'failure'
+        env:
+          ALIAS: ${{ vars.LAMBDA_ALIAS_NAME || 'live' }}
+          CURRENT_VERSION: ${{ steps.current.outputs.version }}
+        run: |
+          aws lambda update-alias \
+            --function-name "${{ vars.LAMBDA_FUNCTION_NAME }}" \
+            --name "$ALIAS" \
+            --function-version "$CURRENT_VERSION" \
+            --routing-config '{"AdditionalVersionWeights":{}}' > /dev/null
+          echo "::error::Gate de Grafana falló tras promover; rollback aplicado a v$CURRENT_VERSION (100%) en el alias '$ALIAS'"
 
       - name: Promover sin canary (sin Function URL configurada para verificar)
         if: steps.creds.outputs.enabled == 'true' && vars.LAMBDA_FUNCTION_URL == ''

@@ -27,3 +27,22 @@ variable "log_retention_days" {
   type        = number
   default     = 14
 }
+
+variable "otel_exporter_otlp_endpoint" {
+  description = "Endpoint OTLP (ej. Grafana Cloud) para exportar métricas/logs/trazas. Vacío desactiva el export en vez de fallar el arranque."
+  type        = string
+  default     = ""
+}
+
+variable "otel_exporter_otlp_headers" {
+  description = "Headers de autenticación OTLP (ej. \"Authorization=Basic <token>\" para Grafana Cloud)."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "otel_service_name" {
+  description = "Nombre de servicio OTel; distinto del de la VM para que el gate de Grafana del canary mida solo tráfico de esta función."
+  type        = string
+  default     = "linker-3-serverless"
+}
