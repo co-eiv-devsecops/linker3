@@ -329,7 +329,7 @@ test("una ruta desconocida se despacha como redirección por código", async (t)
   );
 });
 
-test("HEAD /:code responde 200 con la URL de destino en Location, sin cuerpo ni incremento de visitas", async (t) => {
+test("HEAD /:code responde 200 con la URL de destino en Location y como body, sin incrementar visitas", async (t) => {
   const { repo, router } = makeRouter(t);
   repo.save("abc123", "https://www.wikipedia.org");
   const res = new FakeResponse();
@@ -338,7 +338,7 @@ test("HEAD /:code responde 200 con la URL de destino en Location, sin cuerpo ni 
 
   assert.equal(res.status, 200);
   assert.equal(res.headers.Location, "https://www.wikipedia.org");
-  assert.equal(res.body, "");
+  assert.equal(res.body, "https://www.wikipedia.org");
   assert.equal(repo.findByCode("abc123")?.visits, 0);
 });
 
