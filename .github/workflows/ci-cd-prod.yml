@@ -33,7 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -171,7 +171,7 @@ jobs:
             echo "Colección Postman no encontrada, omitiendo pruebas de API"
           fi
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         if: steps.check.outputs.exists == 'true'
         with:
           node-version: ${{ env.NODE_VERSION }}
