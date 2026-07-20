@@ -81,7 +81,7 @@ jobs:
         with:
           name: linker-serverless-${{ github.sha }}
 
-      - uses: aws-actions/configure-aws-credentials@v5
+      - uses: aws-actions/configure-aws-credentials@v6
         if: steps.creds.outputs.enabled == 'true'
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
