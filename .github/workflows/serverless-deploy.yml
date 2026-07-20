@@ -76,7 +76,7 @@ jobs:
             echo "::notice::Deploy serverless omitido: faltan AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY (secrets) o AWS_REGION/LAMBDA_FUNCTION_NAME (vars)."
           fi
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         if: steps.creds.outputs.enabled == 'true'
         with:
           name: linker-serverless-${{ github.sha }}
